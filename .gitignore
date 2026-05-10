@@ -23,7 +23,7 @@ Thumbs.db
 .idea/
 
 # Docker volumes
-postgres_data/
+postgres-data/
 
 # Coverage
 coverage/
