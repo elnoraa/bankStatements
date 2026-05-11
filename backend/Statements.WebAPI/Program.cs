@@ -14,6 +14,16 @@ var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? ne
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:3000")
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
+});
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
@@ -52,6 +62,7 @@ if (!builder.Configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER"))
     app.UseHttpsRedirection();
 }
 
+app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
 
