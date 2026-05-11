@@ -25,5 +25,10 @@ Thumbs.db
 # Docker volumes
 postgres-data/
 
+# Uploaded files
+Uploads/
+
 # Coverage
 coverage/
+
+*.txt

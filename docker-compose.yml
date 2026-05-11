@@ -31,8 +31,10 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Host=db;Database=bankdb;Username=user;Password=password
       - DOTNET_USE_POLLING_FILE_WATCHER=1
+      - FileStorage__UploadsDirectory=/uploads
     volumes:
       - ./backend/Statements.WebAPI:/app
+      - ./backend/Uploads:/uploads
       - backend-bin:/app/bin
       - backend-obj:/app/obj
 

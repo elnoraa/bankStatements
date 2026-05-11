@@ -10,4 +10,4 @@ COPY Statements.WebAPI/ ./
 
 EXPOSE 5213
 
-ENTRYPOINT ["dotnet", "watch", "run", "--launch-profile", "docker"]
+ENTRYPOINT ["dotnet", "watch", "run", "--non-interactive", "--launch-profile", "docker"]

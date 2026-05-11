@@ -1,5 +1,6 @@
 bin/
 obj/
+Uploads/
 .git
 .gitignore
 .vs

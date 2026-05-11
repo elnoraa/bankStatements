@@ -4,3 +4,20 @@ GET {{Statements.WebAPI_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+GET {{Statements.WebAPI_HostAddress}}/api/health
+Accept: application/json
+
+###
+
+POST {{Statements.WebAPI_HostAddress}}/api/files/upload
+Content-Type: multipart/form-data; boundary=UploadBoundary
+
+--UploadBoundary
+Content-Disposition: form-data; name="file"; filename="sample.txt"
+Content-Type: text/plain
+
+< ../../sample.txt
+--UploadBoundary--
+
+###
