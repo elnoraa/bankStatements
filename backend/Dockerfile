@@ -8,5 +8,6 @@ RUN dotnet restore
 # Copy source code
 COPY Statements.WebAPI/ ./
 
-EXPOSE 80
-ENTRYPOINT ["dotnet", "watch", "run"]
+EXPOSE 5213
+
+ENTRYPOINT ["dotnet", "watch", "run", "--launch-profile", "docker"]
