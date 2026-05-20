@@ -135,18 +135,20 @@ public sealed class StatementService : IStatementService
 
             File.Delete(savedPath);
 
-            return new StatementUploadResponse(
-                Id: existingStatementId.Value,
-                UserId: userId,
-                BankAccountId: bankAccountId,
-                OriginalFileName: originalFileName,
-                StoredFileName: storedFileName,
-                FileHash: fileHash,
-                SizeInBytes: file.Length,
-                ContentType: file.ContentType,
-                Status: "uploaded",
-                UploadedAt: DateTimeOffset.UtcNow,
-                ParsedTransactionCount: 0);
+            return new StatementUploadResponse
+            {
+                Id = existingStatementId.Value,
+                UserId = userId,
+                BankAccountId = bankAccountId,
+                OriginalFileName = originalFileName,
+                StoredFileName = storedFileName,
+                FileHash = fileHash,
+                SizeInBytes = file.Length,
+                ContentType = file.ContentType,
+                Status = "uploaded",
+                UploadedAt = DateTimeOffset.UtcNow,
+                ParsedTransactionCount = 0
+            };
         }
 
         try
@@ -246,7 +248,7 @@ public sealed class StatementService : IStatementService
             _logger.LogInformation("Statement {StatementId} processed successfully", processedStatement.Id);
             return processedStatement;
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not InvalidOperationException)
         {
             _logger.LogError(ex, "Failed to process statement upload: {FileName}", originalFileName);
 
@@ -261,7 +263,7 @@ public sealed class StatementService : IStatementService
                     cancellationToken: CancellationToken.None));
 
             File.Delete(savedPath);
-            throw;
+            throw new InvalidOperationException("Failed to process the statement. The file may be invalid or corrupted.", ex);
         }
     }
 

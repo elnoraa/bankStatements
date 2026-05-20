@@ -56,7 +56,27 @@ public sealed class ClamAvVirusScanService : IVirusScanService, IDisposable
             using var scanCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             scanCts.CancelAfter(TimeSpan.FromSeconds(_scanTimeoutSeconds));
 
-            var fileBytes = await File.ReadAllBytesAsync(filePath, scanCts.Token);
+            // Retry file read for transient Docker overlay2 fs inconsistencies
+            byte[] fileBytes;
+            const int maxRetries = 3;
+            const int retryDelayMs = 100;
+
+            for (var attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    fileBytes = await File.ReadAllBytesAsync(filePath, scanCts.Token);
+                    break;
+                }
+                catch (IOException) when (attempt < maxRetries)
+                {
+                    _logger.LogDebug(
+                        "Retrying file read for virus scan (attempt {Attempt}/{MaxRetries}): {FilePath}",
+                        attempt, maxRetries, filePath);
+                    await Task.Delay(retryDelayMs, scanCts.Token);
+                }
+            }
+
             var result = await _clamClient.SendAndScanFileAsync(fileBytes, scanCts.Token);
 
             sw.Stop();

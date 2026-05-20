@@ -17,4 +17,4 @@ EXPOSE 5213
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
     CMD curl --fail http://localhost:5213/api/health || exit 1
 
-ENTRYPOINT ["dotnet", "watch", "run", "--non-interactive", "--launch-profile", "docker"]
+ENTRYPOINT ["dotnet", "run", "--launch-profile", "docker"]

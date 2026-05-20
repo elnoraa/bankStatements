@@ -113,9 +113,11 @@ public sealed class AnalysisService : IAnalysisService
             recentTransactions);
     }
 
-    private sealed record CashflowTotals(
-        DateOnly? PeriodStart,
-        DateOnly? PeriodEnd,
-        decimal TotalCredit,
-        decimal TotalDebit);
+    private sealed class CashflowTotals
+    {
+        public DateOnly? PeriodStart { get; init; }
+        public DateOnly? PeriodEnd { get; init; }
+        public decimal TotalCredit { get; init; }
+        public decimal TotalDebit { get; init; }
+    }
 }

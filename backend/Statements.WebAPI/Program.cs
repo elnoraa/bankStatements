@@ -19,17 +19,21 @@ SqlMapper.AddTypeHandler(new Statements.WebAPI.Infrastructure.NullableDateOnlyHa
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure Serilog
+// Clean up old log files so each container restart starts fresh
+var logsDir = Path.Combine("Logs");
+if (Directory.Exists(logsDir))
+{
+    foreach (var oldLog in Directory.GetFiles(logsDir, "*.log"))
+    {
+        try { File.Delete(oldLog); } catch { /* best-effort */ }
+    }
+}
+
+// Configure Serilog (sinks defined in appsettings.json Serilog section)
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .Enrich.WithProperty("Application", "Statements.WebAPI")
-    .WriteTo.Console()
-    .WriteTo.File(
-        Path.Combine("Logs", "statements-.log"),
-        rollingInterval: RollingInterval.Day,
-        retainedFileCountLimit: 14,
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {Message:lj}{NewLine}{Exception}")
     .CreateLogger();
 
 builder.Host.UseSerilog();
@@ -174,6 +178,19 @@ app.Use(async (context, next) =>
     }
 
     await next();
+});
+
+// Global exception handler: never leak exception details to clients
+app.UseExceptionHandler(exceptionHandlerApp =>
+{
+    exceptionHandlerApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+
+        await context.Response.WriteAsync(
+            """{"error":"An unexpected error occurred. Please try again later."}""");
+    });
 });
 
 app.UseCookiePolicy();

@@ -1,6 +1,8 @@
 namespace Statements.WebAPI.Contracts.Analysis;
 
-public sealed record CategorySpendingResponse(
-    string Category,
-    decimal TotalDebit,
-    int TransactionCount);
+public sealed class CategorySpendingResponse
+{
+    public string Category { get; init; } = null!;
+    public decimal TotalDebit { get; init; }
+    public int TransactionCount { get; init; }
+}
