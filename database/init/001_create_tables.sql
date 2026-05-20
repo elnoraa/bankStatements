@@ -6,6 +6,8 @@ CREATE TABLE app_users (
     display_name VARCHAR(120) NOT NULL,
     password_hash TEXT,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    failed_login_attempts INT NOT NULL DEFAULT 0,
+    locked_until TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

@@ -223,9 +223,9 @@ public sealed partial class PdfStatementParser : IStatementParser
         return "Uncategorised";
     }
 
-    [GeneratedRegex(@"^(?<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\s+(?<rest>.+)$")]
+    [GeneratedRegex(@"^(?<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\s+(?<rest>.+)$", RegexOptions.None, 1000)]
     private static partial Regex DateAtStartRegex();
 
-    [GeneratedRegex(@"\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?|\(?-?\$?\d+\.\d{2}\)?")]
+    [GeneratedRegex(@"\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?|\(?-?\$?\d+\.\d{2}\)?", RegexOptions.None, 1000)]
     private static partial Regex MoneyRegex();
 }

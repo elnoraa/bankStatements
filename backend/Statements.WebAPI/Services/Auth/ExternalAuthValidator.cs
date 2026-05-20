@@ -101,8 +101,8 @@ public sealed class ExternalAuthValidator : IExternalAuthValidator
         var jwksJson = await jwksResp.Content.ReadAsStringAsync(cancellationToken);
         var jwks = new JsonWebKeySet(jwksJson);
 
-        _cache[authority] = (DateTimeOffset.UtcNow.AddHours(24), jwks, issuer);
-        _logger.LogInformation("JWKS cached for authority: {Authority} (expires: {Expiry})", authority, DateTimeOffset.UtcNow.AddHours(24));
+        _cache[authority] = (DateTimeOffset.UtcNow.AddHours(1), jwks, issuer);
+        _logger.LogInformation("JWKS cached for authority: {Authority} (expires: {Expiry})", authority, DateTimeOffset.UtcNow.AddHours(1));
 
         return (jwks, issuer);
     }

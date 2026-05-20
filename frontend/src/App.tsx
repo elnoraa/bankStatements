@@ -1,6 +1,7 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
 import { ExternalLoginButtons } from './components/ExternalLoginButtons';
+import { refreshAuthToken, logout as apiLogout } from './services/externalAuth';
 
 type AuthMode = 'login' | 'register';
 
@@ -14,8 +15,6 @@ type AuthUser = {
 type AuthResponse = {
   accessToken: string;
   accessTokenExpiresAt: string;
-  refreshToken: string;
-  refreshTokenExpiresAt: string;
   user: AuthUser;
 };
 
@@ -61,10 +60,8 @@ function App() {
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [auth, setAuth] = useState<AuthResponse | null>(() => {
-    const saved = localStorage.getItem('statements.auth');
-    return saved ? (JSON.parse(saved) as AuthResponse) : null;
-  });
+  const [auth, setAuth] = useState<AuthResponse | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<StatementUploadResponse | null>(null);
@@ -74,17 +71,34 @@ function App() {
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [appMessage, setAppMessage] = useState('');
 
+  // Track current access token for API calls (stored in memory only — never localStorage)
+  const accessTokenRef = useRef<string | null>(null);
+
   const currency = useMemo(
     () => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }),
     []
   );
 
+  // On mount, try to refresh the auth session via httpOnly cookie
+  useEffect(() => {
+    const init = async () => {
+      const result = await refreshAuthToken();
+      if (result) {
+        accessTokenRef.current = result.accessToken;
+        setAuth(result);
+      }
+      setIsInitialLoading(false);
+    };
+    void init();
+  }, []);
+
+  // When auth changes, load summary or clear state
   useEffect(() => {
     if (auth) {
-      localStorage.setItem('statements.auth', JSON.stringify(auth));
+      accessTokenRef.current = auth.accessToken;
       void loadSummary(auth.accessToken);
     } else {
-      localStorage.removeItem('statements.auth');
+      accessTokenRef.current = null;
       setSummary(null);
       setUpload(null);
     }
@@ -106,13 +120,16 @@ function App() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        credentials: 'include',
       });
 
       if (!response.ok) {
         throw new Error(await response.text());
       }
 
-      setAuth(await response.json() as AuthResponse);
+      const data = await response.json() as AuthResponse;
+      accessTokenRef.current = data.accessToken;
+      setAuth(data);
       setPassword('');
     } catch (error) {
       setAuthMessage(error instanceof Error ? error.message : 'Authentication failed.');
@@ -120,6 +137,45 @@ function App() {
       setIsAuthLoading(false);
     }
   }
+
+  // Helper: make an authenticated API call with automatic token refresh on 401
+  const authedFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const token = accessTokenRef.current;
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        ...options.headers,
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    // If 401, try to refresh the token and retry once
+    if (response.status === 401) {
+      const refreshed = await refreshAuthToken();
+      if (refreshed) {
+        accessTokenRef.current = refreshed.accessToken;
+        setAuth(refreshed);
+        const retryResponse = await fetch(url, {
+          ...options,
+          headers: {
+            ...options.headers,
+            'Authorization': `Bearer ${refreshed.accessToken}`,
+          },
+        });
+        return retryResponse;
+      }
+      // Refresh failed — clear auth state
+      setAuth(null);
+      accessTokenRef.current = null;
+      throw new Error('Session expired. Please sign in again.');
+    }
+
+    return response;
+  }, []);
 
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -135,9 +191,8 @@ function App() {
     formData.append('file', selectedFile);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/statements/upload`, {
+      const response = await authedFetch(`${apiBaseUrl}/api/statements/upload`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${auth.accessToken}` },
         body: formData,
       });
 
@@ -147,7 +202,7 @@ function App() {
 
       setUpload(await response.json() as StatementUploadResponse);
       setSelectedFile(null);
-      await loadSummary(auth.accessToken);
+      await loadSummary();
     } catch (error) {
       setAppMessage(error instanceof Error ? error.message : 'Statement upload failed.');
     } finally {
@@ -155,17 +210,16 @@ function App() {
     }
   }
 
-  async function loadSummary(accessToken = auth?.accessToken) {
-    if (!accessToken) {
+  async function loadSummary(accessToken?: string) {
+    const token = accessToken ?? accessTokenRef.current;
+    if (!token) {
       return;
     }
 
     setIsSummaryLoading(true);
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/analysis/summary`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
+      const response = await authedFetch(`${apiBaseUrl}/api/analysis/summary`);
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -179,13 +233,27 @@ function App() {
     }
   }
 
-  function signOut() {
+  async function signOut() {
+    await apiLogout();
     setAuth(null);
+    accessTokenRef.current = null;
     setEmail('');
     setPassword('');
     setDisplayName('');
     setAppMessage('');
     setAuthMessage('');
+  }
+
+  // Show loading state while checking for existing session
+  if (isInitialLoading) {
+    return (
+      <main className="app-shell auth-layout">
+        <section className="auth-copy">
+          <p className="eyebrow">Bank statement analysis</p>
+          <h1>Loading...</h1>
+        </section>
+      </main>
+    );
   }
 
   if (!auth) {

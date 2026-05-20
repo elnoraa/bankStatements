@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Statements.WebAPI.Contracts.Auth;
 using Statements.WebAPI.Services.Auth;
 
@@ -26,7 +27,8 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(
+    [EnableRateLimiting("Auth")]
+    public async Task<ActionResult<CookieAuthResponse>> Register(
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
@@ -35,7 +37,15 @@ public sealed class AuthController : ControllerBase
         {
             var response = await _authService.RegisterAsync(request, cancellationToken);
             _logger.LogInformation("Registration successful for user {UserId}", response.User.Id);
-            return Created("/api/auth/register", response);
+
+            SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpiresAt);
+
+            var cookieResponse = new CookieAuthResponse(
+                response.AccessToken,
+                response.AccessTokenExpiresAt,
+                response.User);
+
+            return Created("/api/auth/register", cookieResponse);
         }
         catch (AuthConflictException exception)
         {
@@ -45,7 +55,8 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    public async Task<ActionResult<AuthResponse>> Login(
+    [EnableRateLimiting("Auth")]
+    public async Task<ActionResult<CookieAuthResponse>> Login(
         LoginRequest request,
         CancellationToken cancellationToken)
     {
@@ -54,7 +65,20 @@ public sealed class AuthController : ControllerBase
         {
             var response = await _authService.LoginAsync(request, cancellationToken);
             _logger.LogInformation("Login successful for user {UserId}", response.User.Id);
-            return Ok(response);
+
+            SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpiresAt);
+
+            var cookieResponse = new CookieAuthResponse(
+                response.AccessToken,
+                response.AccessTokenExpiresAt,
+                response.User);
+
+            return Ok(cookieResponse);
+        }
+        catch (AuthAccountLockedException exception)
+        {
+            _logger.LogWarning("Login failed - account locked: {Message}", exception.Message);
+            return Unauthorized(new { message = exception.Message, lockedUntil = exception.LockedUntil });
         }
         catch (AuthInvalidCredentialsException exception)
         {
@@ -63,8 +87,62 @@ public sealed class AuthController : ControllerBase
         }
     }
 
+    [HttpPost("refresh")]
+    [EnableRateLimiting("Auth")]
+    public async Task<ActionResult<CookieAuthResponse>> Refresh(
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("POST /api/auth/refresh called");
+
+        var refreshToken = Request.Cookies["refresh_token"];
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            _logger.LogWarning("Refresh failed - no refresh token cookie");
+            return Unauthorized("No refresh token provided.");
+        }
+
+        try
+        {
+            var response = await _authService.RefreshTokenAsync(refreshToken, cancellationToken);
+            _logger.LogInformation("Token refreshed for user {UserId}", response.User.Id);
+
+            SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpiresAt);
+
+            var cookieResponse = new CookieAuthResponse(
+                response.AccessToken,
+                response.AccessTokenExpiresAt,
+                response.User);
+
+            return Ok(cookieResponse);
+        }
+        catch (AuthInvalidCredentialsException)
+        {
+            _logger.LogWarning("Refresh failed - invalid token");
+            ClearRefreshTokenCookie();
+            return Unauthorized("Invalid or expired refresh token.");
+        }
+    }
+
+    [HttpPost("logout")]
+    public async Task<ActionResult> Logout(
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("POST /api/auth/logout called");
+
+        var refreshToken = Request.Cookies["refresh_token"];
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            await _authService.RevokeTokenAsync(refreshToken, cancellationToken);
+        }
+
+        ClearRefreshTokenCookie();
+        _logger.LogInformation("Logout completed");
+        return Ok(new { message = "Signed out successfully." });
+    }
+
     [HttpPost("external")]
-    public async Task<ActionResult<AuthResponse>> External(
+    [EnableRateLimiting("Auth")]
+    public async Task<ActionResult<CookieAuthResponse>> External(
         ExternalLoginRequest request,
         CancellationToken cancellationToken)
     {
@@ -73,7 +151,15 @@ public sealed class AuthController : ControllerBase
         {
             var response = await _authService.ExternalLoginAsync(request, cancellationToken);
             _logger.LogInformation("External login successful for user {UserId}", response.User.Id);
-            return Ok(response);
+
+            SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpiresAt);
+
+            var cookieResponse = new CookieAuthResponse(
+                response.AccessToken,
+                response.AccessTokenExpiresAt,
+                response.User);
+
+            return Ok(cookieResponse);
         }
         catch (InvalidOperationException ex)
         {
@@ -83,8 +169,9 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("external/code")]
-    public async Task<ActionResult<AuthResponse>> ExternalCode(
-        Statements.WebAPI.Contracts.Auth.ExternalCodeRequest request,
+    [EnableRateLimiting("Auth")]
+    public async Task<ActionResult<CookieAuthResponse>> ExternalCode(
+        ExternalCodeRequest request,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("POST /api/auth/external/code called (provider: {Provider})", request.Provider);
@@ -156,12 +243,51 @@ public sealed class AuthController : ControllerBase
             var loginRequest = new ExternalLoginRequest { Provider = request.Provider, IdToken = idToken };
             var response = await _authService.ExternalLoginAsync(loginRequest, cancellationToken);
             _logger.LogInformation("External code login successful for user {UserId}", response.User.Id);
-            return Ok(response);
+
+            SetRefreshTokenCookie(response.RefreshToken, response.RefreshTokenExpiresAt);
+
+            var cookieResponse = new CookieAuthResponse(
+                response.AccessToken,
+                response.AccessTokenExpiresAt,
+                response.User);
+
+            return Ok(cookieResponse);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "External code login failed for provider: {Provider}", request.Provider);
             return BadRequest(ex.Message);
         }
+    }
+
+    private void SetRefreshTokenCookie(string refreshToken, DateTimeOffset expiresAt)
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            // In production behind HTTPS, this will be true. In dev over HTTP, it must be false for cookies to work.
+            Secure = Request.IsHttps,
+            Path = "/api/auth",
+            IsEssential = true,
+            Expires = expiresAt
+        };
+
+        Response.Cookies.Append("refresh_token", refreshToken, cookieOptions);
+    }
+
+    private void ClearRefreshTokenCookie()
+    {
+        var cookieOptions = new CookieOptions
+        {
+            HttpOnly = true,
+            SameSite = SameSiteMode.Strict,
+            Secure = Request.IsHttps,
+            Path = "/api/auth",
+            IsEssential = true,
+            Expires = DateTimeOffset.UtcNow.AddDays(-1)
+        };
+
+        Response.Cookies.Append("refresh_token", "", cookieOptions);
     }
 }

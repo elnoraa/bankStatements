@@ -1,6 +1,8 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Dapper;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
@@ -42,8 +44,39 @@ builder.Services.AddCors(options =>
     {
         policy
             .WithOrigins("http://localhost:3000")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+            .WithHeaders("Authorization", "Content-Type", "X-Requested-With")
+            .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
+            .AllowCredentials();
+    });
+});
+
+// Configure cookie policy for httpOnly refresh tokens
+builder.Services.Configure<CookiePolicyOptions>(options =>
+{
+    options.MinimumSameSitePolicy = SameSiteMode.Strict;
+    options.HttpOnly = HttpOnlyPolicy.Always;
+    options.Secure = CookieSecurePolicy.SameAsRequest;
+});
+
+// Add rate limiting for auth endpoints
+builder.Services.AddRateLimiter(rateLimiterOptions =>
+{
+    rateLimiterOptions.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    rateLimiterOptions.AddFixedWindowLimiter("Auth", options =>
+    {
+        options.PermitLimit = 5;
+        options.Window = TimeSpan.FromMinutes(15);
+        options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        options.QueueLimit = 0;
+    });
+
+    rateLimiterOptions.AddFixedWindowLimiter("Api", options =>
+    {
+        options.PermitLimit = 100;
+        options.Window = TimeSpan.FromMinutes(1);
+        options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
+        options.QueueLimit = 0;
     });
 });
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
@@ -77,6 +110,9 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
+// Startup validation: fail fast if required secrets are missing or placeholder
+ValidateConfiguration(builder.Configuration, app.Services.GetRequiredService<ILogger<Program>>());
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -88,6 +124,38 @@ if (!builder.Configuration.GetValue<bool>("DOTNET_RUNNING_IN_CONTAINER"))
     app.UseHttpsRedirection();
 }
 
+// Security headers middleware
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "0"); // Deprecated but still scanned by some tools
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+
+    // Content-Security-Policy: restrict script/style sources
+    context.Response.Headers.Append("Content-Security-Policy",
+        "default-src 'self'; " +
+        "script-src 'self'; " +
+        "style-src 'self' 'unsafe-inline'; " +
+        "img-src 'self' data:; " +
+        "font-src 'self'; " +
+        "connect-src 'self'; " +
+        "frame-ancestors 'none'");
+
+    // HSTS (only when HTTPS is used)
+    if (!string.IsNullOrEmpty(context.Request.Scheme) &&
+        context.Request.Scheme.Equals("https", StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers.Append("Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains");
+    }
+
+    await next();
+});
+
+app.UseCookiePolicy();
+app.UseRateLimiter();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
@@ -95,3 +163,44 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static void ValidateConfiguration(IConfiguration configuration, ILogger logger)
+{
+    var requiredVars = new (string Key, string Name)[]
+    {
+        ("Jwt:Secret", "Jwt__Secret"),
+        ("ConnectionStrings:DefaultConnection", "ConnectionStrings__DefaultConnection")
+    };
+
+    var placeholderVars = new (string Key, string Placeholder)[]
+    {
+        ("Jwt:Secret", ""),
+    };
+
+    bool hasErrors = false;
+
+    foreach (var (key, name) in requiredVars)
+    {
+        var value = configuration[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            logger.LogError("Missing required configuration: {Name}. Set it via appsettings, environment variable, or user secrets.", name);
+            hasErrors = true;
+        }
+    }
+
+    // Check for placeholder/empty JWT secret
+    var jwtSecret = configuration["Jwt:Secret"];
+    if (jwtSecret == null || jwtSecret.Length < 32)
+    {
+        logger.LogWarning("JWT secret is too short (minimum 32 characters). Generate a strong secret with: dotnet user-secrets set \"Jwt:Secret\" \"<64-char-random-string>\"");
+    }
+
+    if (hasErrors)
+    {
+        // In production, this prevents the app from starting with missing configuration
+        throw new InvalidOperationException("Required configuration is missing. The application cannot start.");
+    }
+
+    logger.LogInformation("Configuration validated successfully.");
+}

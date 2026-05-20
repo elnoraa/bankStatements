@@ -13,3 +13,14 @@ public sealed class AuthInvalidCredentialsException : Exception
     {
     }
 }
+
+public sealed class AuthAccountLockedException : Exception
+{
+    public DateTime LockedUntil { get; }
+
+    public AuthAccountLockedException(DateTime lockedUntil)
+        : base($"Account is temporarily locked. Please try again after {lockedUntil:HH:mm} UTC.")
+    {
+        LockedUntil = lockedUntil;
+    }
+}

@@ -160,7 +160,8 @@ public sealed class AuthService : IAuthService
         if (existingUserId is not null)
         {
             _logger.LogWarning("Registration failed - email already exists: {Email}", email);
-            throw new AuthConflictException("A user with this email already exists.");
+            // Return generic message to prevent email enumeration
+            throw new AuthConflictException("If the email is available, we'll send you a confirmation. Please check your inbox.");
         }
 
         var passwordHash = _passwordHasher.Hash(request.Password);
@@ -205,21 +206,122 @@ public sealed class AuthService : IAuthService
                     email AS Email,
                     display_name AS DisplayName,
                     email_verified AS EmailVerified,
-                    password_hash AS PasswordHash
+                    password_hash AS PasswordHash,
+                    failed_login_attempts AS FailedLoginAttempts,
+                    locked_until AS LockedUntil
                 FROM app_users
                 WHERE LOWER(email) = LOWER(@Email)
                 """,
                 new { Email = email },
                 cancellationToken: cancellationToken));
 
+        // Check if account is locked (check before verifying password to avoid revealing account existence)
+        if (user is not null && user.LockedUntil.HasValue && user.LockedUntil.Value > DateTime.UtcNow)
+        {
+            _logger.LogWarning("Login rejected for email: {Email} - account locked until {LockedUntil}", email, user.LockedUntil.Value);
+            throw new AuthAccountLockedException(user.LockedUntil.Value);
+        }
+
         if (user is null || !_passwordHasher.Verify(request.Password, user.PasswordHash))
         {
             _logger.LogWarning("Login failed for email: {Email} - invalid credentials", email);
+
+            // Track failed login attempt for existing users
+            if (user is not null)
+            {
+                await connection.ExecuteAsync(
+                    new CommandDefinition(
+                        """
+                        UPDATE app_users
+                        SET failed_login_attempts = failed_login_attempts + 1,
+                            locked_until = CASE
+                                WHEN failed_login_attempts + 1 >= 5 THEN NOW() + INTERVAL '15 minutes'
+                                ELSE locked_until
+                            END,
+                            updated_at = NOW()
+                        WHERE id = @Id
+                        """,
+                        new { Id = user.Id },
+                        cancellationToken: cancellationToken));
+            }
+
             throw new AuthInvalidCredentialsException();
         }
 
+        // Reset failed attempts on successful login
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE app_users SET failed_login_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE id = @Id",
+                new { Id = user.Id },
+                cancellationToken: cancellationToken));
+
         _logger.LogInformation("Login successful: UserId={UserId}, Email={Email}", user.Id, user.Email);
         return await CreateAuthResponseAsync(connection, user, cancellationToken);
+    }
+
+    public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Refresh token attempt");
+
+        var tokenHash = HashRefreshToken(refreshToken);
+
+        using var connection = _connectionFactory.CreateConnection();
+        var storedToken = await connection.QueryFirstOrDefaultAsync<(Guid Id, Guid UserId, DateTime ExpiresAt, DateTime? RevokedAt)>(
+            new CommandDefinition(
+                "SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = @TokenHash",
+                new { TokenHash = tokenHash },
+                cancellationToken: cancellationToken));
+
+        if (storedToken.Id == Guid.Empty)
+        {
+            _logger.LogWarning("Refresh token not found or invalid");
+            throw new AuthInvalidCredentialsException();
+        }
+
+        if (storedToken.RevokedAt.HasValue)
+        {
+            _logger.LogWarning("Refresh token has been revoked");
+            throw new AuthInvalidCredentialsException();
+        }
+
+        if (storedToken.ExpiresAt < DateTime.UtcNow)
+        {
+            _logger.LogWarning("Refresh token has expired");
+            throw new AuthInvalidCredentialsException();
+        }
+
+        // Revoke the old refresh token (rotation)
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = @Id",
+                new { Id = storedToken.Id },
+                cancellationToken: cancellationToken));
+
+        _logger.LogDebug("Old refresh token revoked for user {UserId}", storedToken.UserId);
+
+        var user = await connection.QuerySingleAsync<AuthUser>(
+            new CommandDefinition(
+                "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash, failed_login_attempts AS FailedLoginAttempts, locked_until AS LockedUntil FROM app_users WHERE id = @Id",
+                new { Id = storedToken.UserId },
+                cancellationToken: cancellationToken));
+
+        return await CreateAuthResponseAsync(connection, user, cancellationToken);
+    }
+
+    public async Task RevokeTokenAsync(string refreshToken, CancellationToken cancellationToken)
+    {
+        _logger.LogDebug("Revoke token attempt");
+
+        var tokenHash = HashRefreshToken(refreshToken);
+
+        using var connection = _connectionFactory.CreateConnection();
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = @TokenHash AND revoked_at IS NULL",
+                new { TokenHash = tokenHash },
+                cancellationToken: cancellationToken));
+
+        _logger.LogDebug("Refresh token revoked");
     }
 
     private async Task<AuthResponse> CreateAuthResponseAsync(
