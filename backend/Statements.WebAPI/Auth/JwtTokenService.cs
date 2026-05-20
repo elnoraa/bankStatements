@@ -10,16 +10,19 @@ namespace Statements.WebAPI.Auth;
 public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly JwtOptions _options;
+    private readonly ILogger<JwtTokenService> _logger;
 
-    public JwtTokenService(IOptions<JwtOptions> options)
+    public JwtTokenService(IOptions<JwtOptions> options, ILogger<JwtTokenService> logger)
     {
         _options = options.Value;
+        _logger = logger;
     }
 
     public JwtAccessToken CreateAccessToken(AuthUser user)
     {
         if (string.IsNullOrWhiteSpace(_options.Secret))
         {
+            _logger.LogError("JWT secret is not configured.");
             throw new InvalidOperationException("JWT secret is not configured.");
         }
 
@@ -43,6 +46,8 @@ public sealed class JwtTokenService : IJwtTokenService
             now.UtcDateTime,
             expiresAt.UtcDateTime,
             credentials);
+
+        _logger.LogDebug("Access token created for user {UserId} (expires: {ExpiresAt})", user.Id, expiresAt);
 
         return new JwtAccessToken(new JwtSecurityTokenHandler().WriteToken(token), expiresAt);
     }

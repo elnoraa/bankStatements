@@ -2,9 +2,9 @@ services:
   db:
     image: postgres:13
     environment:
-      POSTGRES_DB: bankdb
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: password
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
@@ -18,8 +18,8 @@ services:
     depends_on:
       - db
     environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_DEFAULT_EMAIL=${PGADMIN_DEFAULT_EMAIL}
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
@@ -30,14 +30,19 @@ services:
     depends_on:
       - db
     environment:
-      - ConnectionStrings__DefaultConnection=Host=db;Database=bankdb;Username=user;Password=password
-      - Jwt__Issuer=Statements.WebAPI
-      - Jwt__Audience=Statements.Client
-      - Jwt__Secret=dev-only-secret-key-change-before-production-12345
-      - Jwt__AccessTokenMinutes=15
-      - Jwt__RefreshTokenDays=30
-      - DOTNET_USE_POLLING_FILE_WATCHER=1
-      - FileStorage__UploadsDirectory=/uploads
+      - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
+      - Jwt__Issuer=${Jwt__Issuer}
+      - Jwt__Audience=${Jwt__Audience}
+      - Jwt__Secret=${Jwt__Secret}
+      - Jwt__AccessTokenMinutes=${Jwt__AccessTokenMinutes}
+      - Jwt__RefreshTokenDays=${Jwt__RefreshTokenDays}
+      - DOTNET_USE_POLLING_FILE_WATCHER=${DOTNET_USE_POLLING_FILE_WATCHER}
+      - FileStorage__UploadsDirectory=${FileStorage__UploadsDirectory}
+      - ExternalProviders__Auth0__Authority=${ExternalProviders__Auth0__Authority:-}
+      - ExternalProviders__Auth0__ClientId=${ExternalProviders__Auth0__ClientId:-}
+      - ExternalProviders__Auth0__Audience=${ExternalProviders__Auth0__Audience:-}
+      - ExternalProviders__Google__ClientId=${ExternalProviders__Google__ClientId:-}
+      - ExternalProviders__Google__ClientSecret=${ExternalProviders__Google__ClientSecret:-}
     volumes:
       - ./backend/Statements.WebAPI:/app
       - ./backend/Uploads:/uploads
@@ -51,7 +56,11 @@ services:
     depends_on:
       - backend
     environment:
-      - VITE_API_BASE_URL=http://localhost:5213
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_PROXY_TARGET=http://backend:5213
+      - VITE_GOOGLE_CLIENT_ID=${VITE_GOOGLE_CLIENT_ID}
+      - VITE_AUTH0_DOMAIN=${VITE_AUTH0_DOMAIN}
+      - VITE_AUTH0_CLIENT_ID=${VITE_AUTH0_CLIENT_ID}
 
 volumes:
   postgres-data:

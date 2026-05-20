@@ -324,3 +324,56 @@ button:disabled {
     flex-direction: column;
   }
 }
+
+/* ── External Login Buttons ─────────────── */
+
+.external-login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+  color: #8a99ad;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.external-login-divider::before,
+.external-login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #dce3eb;
+}
+
+.external-login-buttons {
+  display: grid;
+  gap: 10px;
+}
+
+.external-login-buttons button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid #c8d2df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.external-login-buttons button:hover {
+  background: #f5f7fa;
+  border-color: #91a3b7;
+}
+
+.external-login-buttons button:active {
+  background: #e9eef4;
+}

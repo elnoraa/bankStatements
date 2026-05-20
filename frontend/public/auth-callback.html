@@ -17,7 +17,7 @@
         // post authorization code back to opener window
         if (window.opener && query.code) {
           window.opener.postMessage({
-            provider: query.provider || undefined,
+            provider: query.state?.split(':')[1],
             code: query.code,
             state: query.state
           }, window.location.origin);

@@ -13,10 +13,12 @@ namespace Statements.WebAPI.Controllers;
 public sealed class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
+    private readonly ILogger<AnalysisController> _logger;
 
-    public AnalysisController(IAnalysisService analysisService)
+    public AnalysisController(IAnalysisService analysisService, ILogger<AnalysisController> logger)
     {
         _analysisService = analysisService;
+        _logger = logger;
     }
 
     [HttpGet("summary")]
@@ -30,20 +32,31 @@ public sealed class AnalysisController : ControllerBase
 
         if (userId is null)
         {
+            _logger.LogWarning("GET /api/analysis/summary - Unauthorized: invalid user id in token");
             return Unauthorized("Authenticated user id is missing or invalid.");
         }
 
+        _logger.LogInformation(
+            "GET /api/analysis/summary called: UserId={UserId}, BankAccountId={BankAccountId}, From={From}, To={To}",
+            userId, bankAccountId, from, to);
+
         if (from is not null && to is not null && from > to)
         {
+            _logger.LogWarning("Invalid date range: from ({From}) > to ({To})", from, to);
             return BadRequest("'from' must be before or equal to 'to'.");
         }
 
-        return Ok(await _analysisService.GetSummaryAsync(
+        var result = await _analysisService.GetSummaryAsync(
             userId.Value,
             bankAccountId,
             from,
             to,
-            cancellationToken));
+            cancellationToken);
+
+        _logger.LogInformation("Spending summary returned for user {UserId}: {TransactionCount} recent transactions",
+            userId, result.RecentTransactions.Count);
+
+        return Ok(result);
     }
 
     private Guid? GetCurrentUserId()

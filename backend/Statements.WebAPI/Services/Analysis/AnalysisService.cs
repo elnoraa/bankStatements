@@ -7,10 +7,12 @@ namespace Statements.WebAPI.Services.Analysis;
 public sealed class AnalysisService : IAnalysisService
 {
     private readonly IDbConnectionFactory _connectionFactory;
+    private readonly ILogger<AnalysisService> _logger;
 
-    public AnalysisService(IDbConnectionFactory connectionFactory)
+    public AnalysisService(IDbConnectionFactory connectionFactory, ILogger<AnalysisService> logger)
     {
         _connectionFactory = connectionFactory;
+        _logger = logger;
     }
 
     public async Task<SpendingSummaryResponse> GetSummaryAsync(
@@ -20,6 +22,9 @@ public sealed class AnalysisService : IAnalysisService
         DateOnly? to,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Getting spending summary for user {UserId}, bankAccountId: {BankAccountId}, from: {From}, to: {To}",
+            userId, bankAccountId, from, to);
+
         using var connection = _connectionFactory.CreateConnection();
         var parameters = new
         {
@@ -41,8 +46,8 @@ public sealed class AnalysisService : IAnalysisService
                 JOIN bank_statements s ON s.id = t.bank_statement_id
                 WHERE s.user_id = @UserId
                 AND (@BankAccountId IS NULL OR t.bank_account_id = @BankAccountId)
-                AND (@From IS NULL OR t.transaction_date >= @From)
-                AND (@To IS NULL OR t.transaction_date <= @To)
+                AND (@From::date IS NULL OR t.transaction_date >= @From::date)
+                AND (@To::date IS NULL OR t.transaction_date <= @To::date)
                 """,
                 parameters,
                 cancellationToken: cancellationToken));
@@ -60,8 +65,8 @@ public sealed class AnalysisService : IAnalysisService
                 WHERE s.user_id = @UserId
                 AND t.transaction_type = 'debit'
                 AND (@BankAccountId IS NULL OR t.bank_account_id = @BankAccountId)
-                AND (@From IS NULL OR t.transaction_date >= @From)
-                AND (@To IS NULL OR t.transaction_date <= @To)
+                AND (@From::date IS NULL OR t.transaction_date >= @From::date)
+                AND (@To::date IS NULL OR t.transaction_date <= @To::date)
                 GROUP BY COALESCE(c.name, 'Uncategorised')
                 ORDER BY TotalDebit DESC
                 """,
@@ -83,8 +88,8 @@ public sealed class AnalysisService : IAnalysisService
                 LEFT JOIN transaction_categories c ON c.id = t.category_id
                 WHERE s.user_id = @UserId
                 AND (@BankAccountId IS NULL OR t.bank_account_id = @BankAccountId)
-                AND (@From IS NULL OR t.transaction_date >= @From)
-                AND (@To IS NULL OR t.transaction_date <= @To)
+                AND (@From::date IS NULL OR t.transaction_date >= @From::date)
+                AND (@To::date IS NULL OR t.transaction_date <= @To::date)
                 ORDER BY t.transaction_date DESC, t.created_at DESC
                 LIMIT 20
                 """,
@@ -92,6 +97,10 @@ public sealed class AnalysisService : IAnalysisService
                 cancellationToken: cancellationToken))).AsList();
 
         var netCashflow = totals.TotalCredit - totals.TotalDebit;
+
+        _logger.LogInformation(
+            "Spending summary for user {UserId}: {TransactionCount} transactions, {CategoryCount} categories, net cashflow: {NetCashflow}",
+            userId, recentTransactions.Count, spendingByCategory.Count, netCashflow);
 
         return new SpendingSummaryResponse(
             totals.PeriodStart,

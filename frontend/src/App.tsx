@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import './App.css';
+import { ExternalLoginButtons } from './components/ExternalLoginButtons';
 
 type AuthMode = 'login' | 'register';
 
@@ -98,7 +99,7 @@ function App() {
     const path = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
     const body = authMode === 'login'
       ? { email, password }
-      : { email, displayName, password };
+      : { email, password, ...(displayName ? { displayName } : {}) };
 
     try {
       const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -223,9 +224,7 @@ function App() {
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
-                  minLength={2}
                   maxLength={120}
-                  required
                 />
               </label>
             )}
@@ -253,6 +252,12 @@ function App() {
               {isAuthLoading ? 'Working...' : authMode === 'login' ? 'Login' : 'Create account'}
             </button>
           </form>
+
+          <div className="external-login-divider">
+            <span>or</span>
+          </div>
+
+          <ExternalLoginButtons />
         </section>
       </main>
     );

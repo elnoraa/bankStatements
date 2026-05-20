@@ -15,10 +15,12 @@ public sealed class StatementsController : ControllerBase
     private const long MaxUploadSizeInBytes = 10 * 1024 * 1024;
 
     private readonly IStatementService _statementService;
+    private readonly ILogger<StatementsController> _logger;
 
-    public StatementsController(IStatementService statementService)
+    public StatementsController(IStatementService statementService, ILogger<StatementsController> logger)
     {
         _statementService = statementService;
+        _logger = logger;
     }
 
     [HttpPost("upload")]
@@ -32,21 +34,28 @@ public sealed class StatementsController : ControllerBase
 
         if (userId is null)
         {
+            _logger.LogWarning("POST /api/statements/upload - Unauthorized: invalid user id in token");
             return Unauthorized("Authenticated user id is missing or invalid.");
         }
 
         if (file is null || file.Length == 0)
         {
+            _logger.LogWarning("Upload rejected - no file provided or empty file");
             return BadRequest("Upload a non-empty statement file.");
         }
+
+        _logger.LogInformation("POST /api/statements/upload called: UserId={UserId}, FileName={FileName}, Size={Size}",
+            userId, file.FileName, file.Length);
 
         try
         {
             var response = await _statementService.UploadAsync(userId.Value, bankAccountId, file, cancellationToken);
+            _logger.LogInformation("Statement uploaded successfully: Id={StatementId}, Status={Status}", response.Id, response.Status);
             return Created($"/api/statements/{response.Id}", response);
         }
         catch (InvalidOperationException exception)
         {
+            _logger.LogWarning("Statement upload failed: {Message}", exception.Message);
             return BadRequest(exception.Message);
         }
     }

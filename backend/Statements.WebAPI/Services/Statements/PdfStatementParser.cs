@@ -6,20 +6,35 @@ namespace Statements.WebAPI.Services.Statements;
 
 public sealed partial class PdfStatementParser : IStatementParser
 {
+    private readonly ILogger<PdfStatementParser> _logger;
+
+    public PdfStatementParser(ILogger<PdfStatementParser> logger)
+    {
+        _logger = logger;
+    }
+
     public IReadOnlyList<ParsedStatementTransaction> Parse(string filePath)
     {
+        _logger.LogInformation("Parsing PDF statement: {FilePath}", filePath);
+
         if (!Path.GetExtension(filePath).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("Parse rejected - not a PDF file: {FilePath}", filePath);
             throw new InvalidOperationException("Only PDF bank statements are supported.");
         }
 
         using var document = PdfDocument.Open(filePath);
         var transactions = new List<ParsedStatementTransaction>();
+        var pageCount = document.NumberOfPages;
+
+        _logger.LogDebug("PDF has {PageCount} pages", pageCount);
 
         foreach (var page in document.GetPages())
         {
             var lines = page.Text
                 .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            _logger.LogTrace("Page {PageNumber}: {LineCount} lines", page.Number, lines.Length);
 
             foreach (var line in lines)
             {
@@ -32,6 +47,7 @@ public sealed partial class PdfStatementParser : IStatementParser
             }
         }
 
+        _logger.LogInformation("Parsed {TransactionCount} transactions from {FilePath}", transactions.Count, filePath);
         return transactions;
     }
 

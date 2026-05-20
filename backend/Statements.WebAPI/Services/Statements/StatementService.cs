@@ -10,17 +10,20 @@ public sealed class StatementService : IStatementService
     private readonly IStatementParser _statementParser;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
+    private readonly ILogger<StatementService> _logger;
 
     public StatementService(
         IDbConnectionFactory connectionFactory,
         IStatementParser statementParser,
         IWebHostEnvironment environment,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        ILogger<StatementService> logger)
     {
         _connectionFactory = connectionFactory;
         _statementParser = statementParser;
         _environment = environment;
         _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<StatementUploadResponse> UploadAsync(
@@ -29,8 +32,12 @@ public sealed class StatementService : IStatementService
         IFormFile file,
         CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Statement upload requested: UserId={UserId}, FileName={FileName}, Size={Size}",
+            userId, file.FileName, file.Length);
+
         if (!Path.GetExtension(file.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
+            _logger.LogWarning("Upload rejected - not a PDF file: {FileName}", file.FileName);
             throw new InvalidOperationException("Only PDF bank statements are supported.");
         }
 
@@ -53,8 +60,11 @@ public sealed class StatementService : IStatementService
 
             if (!accountBelongsToUser)
             {
+                _logger.LogWarning("Upload rejected - bank account {BankAccountId} does not belong to user {UserId}", bankAccountId, userId);
                 throw new InvalidOperationException("The selected bank account does not exist for this user.");
             }
+
+            _logger.LogDebug("Bank account {BankAccountId} verified for user {UserId}", bankAccountId, userId);
         }
 
         var uploadsDirectory = GetUploadsDirectory();
@@ -64,13 +74,19 @@ public sealed class StatementService : IStatementService
         var storedFileName = $"{Path.GetFileNameWithoutExtension(originalFileName)}-{Guid.NewGuid():N}.pdf";
         var savedPath = Path.Combine(uploadsDirectory, storedFileName);
 
+        _logger.LogDebug("Saving uploaded file to: {SavedPath}", savedPath);
+
         await using (var stream = File.Create(savedPath))
         {
             await file.CopyToAsync(stream, cancellationToken);
         }
 
+        _logger.LogDebug("File saved successfully: {SavedPath} ({Size} bytes)", savedPath, file.Length);
+
         try
         {
+            _logger.LogInformation("Inserting bank statement record for file: {OriginalFileName}", originalFileName);
+
             var statement = await connection.QuerySingleAsync<StatementUploadResponse>(
                 new CommandDefinition(
                     """
@@ -115,8 +131,15 @@ public sealed class StatementService : IStatementService
                     },
                     cancellationToken: cancellationToken));
 
+            _logger.LogInformation("Bank statement record created: StatementId={StatementId}, Status={Status}", statement.Id, statement.Status);
+
             var transactions = _statementParser.Parse(savedPath);
+            _logger.LogInformation("Parsed {TransactionCount} transactions from statement {StatementId}", transactions.Count, statement.Id);
+
             await InsertTransactionsAsync(connection, statement.Id, bankAccountId, transactions, cancellationToken);
+
+            _logger.LogInformation("Marking statement {StatementId} as processed with {TransactionCount} transactions",
+                statement.Id, transactions.Count);
 
             var processedStatement = await connection.QuerySingleAsync<StatementUploadResponse>(
                 new CommandDefinition(
@@ -149,10 +172,13 @@ public sealed class StatementService : IStatementService
                     },
                     cancellationToken: cancellationToken));
 
+            _logger.LogInformation("Statement {StatementId} processed successfully", processedStatement.Id);
             return processedStatement;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Failed to process statement upload: {FileName}", originalFileName);
+
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     """
@@ -168,13 +194,15 @@ public sealed class StatementService : IStatementService
         }
     }
 
-    private static async Task InsertTransactionsAsync(
+    private async Task InsertTransactionsAsync(
         System.Data.IDbConnection connection,
         Guid statementId,
         Guid? bankAccountId,
         IReadOnlyList<ParsedStatementTransaction> transactions,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Inserting {Count} transactions for statement {StatementId}", transactions.Count, statementId);
+
         for (var index = 0; index < transactions.Count; index++)
         {
             var transaction = transactions[index];
@@ -231,12 +259,15 @@ public sealed class StatementService : IStatementService
 
         if (!string.IsNullOrWhiteSpace(configuredDirectory))
         {
+            _logger.LogDebug("Using configured uploads directory: {Directory}", configuredDirectory);
             return configuredDirectory;
         }
 
         var backendDirectory = Directory.GetParent(_environment.ContentRootPath)?.FullName
             ?? _environment.ContentRootPath;
 
-        return Path.Combine(backendDirectory, "Uploads");
+        var uploadsPath = Path.Combine(backendDirectory, "Uploads");
+        _logger.LogDebug("Using default uploads directory: {Directory}", uploadsPath);
+        return uploadsPath;
     }
 }

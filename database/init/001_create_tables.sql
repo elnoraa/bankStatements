@@ -4,7 +4,7 @@ CREATE TABLE app_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(320) NOT NULL UNIQUE,
     display_name VARCHAR(120) NOT NULL,
-    password_hash TEXT NOT NULL,
+    password_hash TEXT,
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -92,3 +92,16 @@ CREATE INDEX idx_statement_transactions_statement_id ON statement_transactions(b
 CREATE INDEX idx_statement_transactions_account_date ON statement_transactions(bank_account_id, transaction_date);
 CREATE INDEX idx_statement_transactions_category_id ON statement_transactions(category_id);
 CREATE INDEX idx_analysis_runs_user_period ON analysis_runs(user_id, period_start, period_end);
+
+CREATE TABLE external_logins (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+    provider VARCHAR(100) NOT NULL,
+    provider_key VARCHAR(200) NOT NULL,
+    display_name VARCHAR(200),
+    email VARCHAR(320),
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(provider, provider_key)
+);
+
+CREATE INDEX idx_external_logins_user_id ON external_logins(user_id);

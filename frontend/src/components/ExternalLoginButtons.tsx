@@ -7,6 +7,15 @@ function openPopup(url: string, name = 'oauth', w = 500, h = 700) {
   return window.open(url, name, `toolbar=0,location=0,status=0,menubar=0,scrollbars=1,resizable=1,width=${w},height=${h},top=${top},left=${left}`);
 }
 
+function generateCodeVerifier(): string {
+  // 32 random bytes → base64url = 43 chars (meets PKCE 43–128 char spec)
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  let str = '';
+  for (let i = 0; i < bytes.byteLength; i++) str += String.fromCharCode(bytes[i]);
+  return btoa(str).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
 function makeNonce() {
   return Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
@@ -33,16 +42,16 @@ export const ExternalLoginButtons: React.FC = () => {
       if (!data) return;
       // PKCE flow returns code
       if (data.code) {
-        const provider = data.provider || 'unknown';
+        const provider = (data.state && data.state.includes(':') ? data.state.split(':')[1] : null) || 'unknown';
         const state = data.state;
         const key = `pkce:${state}`;
         const codeVerifier = sessionStorage.getItem(key);
         sessionStorage.removeItem(key);
         if (!codeVerifier) throw new Error('Missing code verifier');
-        const redirectUri = `${window.location.origin}/auth-callback.html?provider=${encodeURIComponent(provider)}`;
+        const redirectUri = `${window.location.origin}/auth-callback.html`;
         await import('../services/externalAuth').then(mod => mod.postExternalCode(provider, data.code, codeVerifier, redirectUri));
       } else if (data.id_token || data.access_token) {
-        const provider = data.provider || 'unknown';
+        const provider = (data.state && data.state.includes(':') ? data.state.split(':')[1] : null) || 'unknown';
         const idToken = data.id_token || data.access_token;
         await postExternalLogin(provider, idToken);
       }
@@ -58,11 +67,11 @@ export const ExternalLoginButtons: React.FC = () => {
     return () => window.removeEventListener('message', onMessage);
   }, [onMessage]);
 
-  const startAuth = useCallback(async (provider: 'Google' | 'Microsoft' | 'Auth0') => {
+  const startAuth = useCallback(async (provider: 'Google' | 'Auth0') => {
     const origin = window.location.origin;
-    const redirectUri = `${origin}/auth-callback.html?provider=${encodeURIComponent(provider)}`;
-    const state = makeNonce();
-    const codeVerifier = makeNonce() + makeNonce();
+    const redirectUri = `${origin}/auth-callback.html`;
+    const state = `${makeNonce()}:${provider}`;
+    const codeVerifier = generateCodeVerifier();
     const codeChallenge = await sha256(codeVerifier);
     // store verifier keyed by state
     sessionStorage.setItem(`pkce:${state}`, codeVerifier);
@@ -72,10 +81,6 @@ export const ExternalLoginButtons: React.FC = () => {
       const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID;
       const scope = encodeURIComponent('openid email profile');
       url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&code_challenge=${codeChallenge}&code_challenge_method=S256&state=${state}&prompt=select_account`;
-    } else if (provider === 'Microsoft') {
-      const clientId = import.meta.env.VITE_MICROSOFT_CLIENT_ID;
-      const scope = encodeURIComponent('openid email profile');
-      url = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scope}&code_challenge=${codeChallenge}&code_challenge_method=S256&state=${state}`;
     } else if (provider === 'Auth0') {
       const domain = import.meta.env.VITE_AUTH0_DOMAIN;
       const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID;
@@ -91,9 +96,8 @@ export const ExternalLoginButtons: React.FC = () => {
   }, []);
 
   return (
-    <div>
+    <div className="external-login-buttons">
       <button onClick={() => startAuth('Google')}>Sign in with Google</button>
-      <button onClick={() => startAuth('Microsoft')}>Sign in with Microsoft</button>
       <button onClick={() => startAuth('Auth0')}>Sign in with Auth0</button>
     </div>
   );
