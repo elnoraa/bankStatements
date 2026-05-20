@@ -7,13 +7,14 @@
 
 .auth-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
-  gap: 32px;
+  grid-template-columns: minmax(0, 540px) minmax(0, 420px);
+  gap: 48px;
+  justify-content: center;
   align-items: center;
 }
 
 .auth-copy {
-  max-width: 760px;
+  max-width: 540px;
 }
 
 .auth-copy h1,
