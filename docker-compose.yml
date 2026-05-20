@@ -37,11 +37,20 @@ services:
       retries: 12
       start_period: 60s
 
+  test:
+    build:
+      context: ./backend
+      target: test
+
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      target: runtime
     ports:
       - "127.0.0.1:5213:5213"
     depends_on:
+      test:
+        condition: service_completed_successfully
       db:
         condition: service_started
       clamav:
