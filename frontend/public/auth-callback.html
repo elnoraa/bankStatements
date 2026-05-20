@@ -1,0 +1,30 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Auth Callback</title>
+  </head>
+  <body>
+    <script>
+      (function() {
+        function parseQuery(qs) {
+          if (!qs) return {};
+          if (qs.startsWith('?')) qs = qs.slice(1);
+          return Object.fromEntries(qs.split('&').map(p => p.split('=').map(decodeURIComponent)));
+        }
+
+        const query = parseQuery(window.location.search);
+        // post authorization code back to opener window
+        if (window.opener && query.code) {
+          window.opener.postMessage({
+            provider: query.provider || undefined,
+            code: query.code,
+            state: query.state
+          }, window.location.origin);
+        }
+        // close the popup
+        setTimeout(() => window.close(), 500);
+      })();
+    </script>
+  </body>
+</html>

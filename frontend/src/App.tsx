@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import './App.css';
 
 type AuthMode = 'login' | 'register';
@@ -53,7 +53,7 @@ type SpendingSummary = {
   recentTransactions: RecentTransaction[];
 };
 
-const apiBaseUrl = process.env.REACT_APP_API_BASE_URL ?? 'http://localhost:5213';
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5213';
 
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
@@ -90,7 +90,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
-  async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsAuthLoading(true);
     setAuthMessage('');
@@ -120,7 +120,7 @@ function App() {
     }
   }
 
-  async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
+  async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!auth || !selectedFile) {
