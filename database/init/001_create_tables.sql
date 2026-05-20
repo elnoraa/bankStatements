@@ -36,6 +36,7 @@ CREATE TABLE bank_statements (
     bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE SET NULL,
     original_file_name VARCHAR(255) NOT NULL,
     stored_file_name VARCHAR(255) NOT NULL UNIQUE,
+    file_hash VARCHAR(64) NOT NULL,
     content_type VARCHAR(120),
     size_in_bytes BIGINT NOT NULL CHECK (size_in_bytes >= 0),
     statement_start_date DATE,
@@ -88,6 +89,7 @@ CREATE INDEX idx_refresh_tokens_user_id ON refresh_tokens(user_id);
 CREATE INDEX idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX idx_bank_statements_user_id ON bank_statements(user_id);
 CREATE INDEX idx_bank_statements_account_id ON bank_statements(bank_account_id);
+CREATE UNIQUE INDEX idx_bank_statements_user_file_hash ON bank_statements(user_id, file_hash);
 CREATE INDEX idx_statement_transactions_statement_id ON statement_transactions(bank_statement_id);
 CREATE INDEX idx_statement_transactions_account_date ON statement_transactions(bank_account_id, transaction_date);
 CREATE INDEX idx_statement_transactions_category_id ON statement_transactions(category_id);

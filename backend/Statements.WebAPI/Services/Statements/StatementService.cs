@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Dapper;
 using Statements.WebAPI.Contracts.Statements;
 using Statements.WebAPI.Data;
@@ -76,12 +77,35 @@ public sealed class StatementService : IStatementService
 
         _logger.LogDebug("Saving uploaded file to: {SavedPath}", savedPath);
 
-        await using (var stream = File.Create(savedPath))
+        string fileHash;
+        await using (var fileStream = File.Create(savedPath))
         {
-            await file.CopyToAsync(stream, cancellationToken);
+            using var sha256 = SHA256.Create();
+            await using var cryptoStream = new CryptoStream(fileStream, sha256, CryptoStreamMode.Write);
+            await file.CopyToAsync(cryptoStream, cancellationToken);
+            await cryptoStream.FlushFinalBlockAsync(cancellationToken);
+            fileHash = Convert.ToHexString(sha256.Hash!);
         }
 
-        _logger.LogDebug("File saved successfully: {SavedPath} ({Size} bytes)", savedPath, file.Length);
+        _logger.LogDebug("File saved successfully: {SavedPath} ({Size} bytes, Hash={FileHash})", savedPath, file.Length, fileHash);
+
+        var existingStatementId = await connection.QuerySingleOrDefaultAsync<Guid?>(
+            new CommandDefinition(
+                """
+                SELECT id
+                FROM bank_statements
+                WHERE user_id = @UserId AND file_hash = @FileHash
+                LIMIT 1
+                """,
+                new { UserId = userId, FileHash = fileHash },
+                cancellationToken: cancellationToken));
+
+        if (existingStatementId is not null)
+        {
+            _logger.LogWarning("Duplicate upload rejected - hash {FileHash} already exists for user {UserId}", fileHash, userId);
+            File.Delete(savedPath);
+            throw new InvalidOperationException("This statement has already been uploaded.");
+        }
 
         try
         {
@@ -95,6 +119,7 @@ public sealed class StatementService : IStatementService
                         bank_account_id,
                         original_file_name,
                         stored_file_name,
+                        file_hash,
                         content_type,
                         size_in_bytes,
                         status
@@ -104,6 +129,7 @@ public sealed class StatementService : IStatementService
                         @BankAccountId,
                         @OriginalFileName,
                         @StoredFileName,
+                        @FileHash,
                         @ContentType,
                         @SizeInBytes,
                         'uploaded'
@@ -114,6 +140,7 @@ public sealed class StatementService : IStatementService
                         bank_account_id AS BankAccountId,
                         original_file_name AS OriginalFileName,
                         stored_file_name AS StoredFileName,
+                        file_hash AS FileHash,
                         size_in_bytes AS SizeInBytes,
                         content_type AS ContentType,
                         status AS Status,
@@ -126,6 +153,7 @@ public sealed class StatementService : IStatementService
                         BankAccountId = bankAccountId,
                         OriginalFileName = originalFileName,
                         StoredFileName = storedFileName,
+                        FileHash = fileHash,
                         ContentType = file.ContentType,
                         SizeInBytes = file.Length
                     },
@@ -157,6 +185,7 @@ public sealed class StatementService : IStatementService
                         bank_account_id AS BankAccountId,
                         original_file_name AS OriginalFileName,
                         stored_file_name AS StoredFileName,
+                        file_hash AS FileHash,
                         size_in_bytes AS SizeInBytes,
                         content_type AS ContentType,
                         status AS Status,
