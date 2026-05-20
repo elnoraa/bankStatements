@@ -23,12 +23,29 @@ services:
     volumes:
       - pgadmin-data:/var/lib/pgadmin
 
+  clamav:
+    image: clamav/clamav:stable
+    ports:
+      - "3310:3310"
+    volumes:
+      - clamav-db:/var/lib/clamav
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+
   backend:
     build: ./backend
     ports:
       - "5213:5213"
     depends_on:
-      - db
+      db:
+        condition: service_started
+      clamav:
+        condition: service_healthy
     environment:
       - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
       - Jwt__Issuer=${Jwt__Issuer}
@@ -43,6 +60,8 @@ services:
       - ExternalProviders__Auth0__Audience=${ExternalProviders__Auth0__Audience:-}
       - ExternalProviders__Google__ClientId=${ExternalProviders__Google__ClientId:-}
       - ExternalProviders__Google__ClientSecret=${ExternalProviders__Google__ClientSecret:-}
+      - ClamAv__Host=${CLAMAV_HOST}
+      - ClamAv__Port=${CLAMAV_PORT}
     volumes:
       - ./backend/Statements.WebAPI:/app
       - ./backend/Uploads:/uploads
@@ -67,3 +86,4 @@ volumes:
   backend-bin:
   backend-obj:
   pgadmin-data:
+  clamav-db:

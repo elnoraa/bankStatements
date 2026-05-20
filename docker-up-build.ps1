@@ -2,4 +2,4 @@ $ErrorActionPreference = "Stop"
 
 Set-Location $PSScriptRoot
 
-docker compose up --build
+docker compose up --build -d

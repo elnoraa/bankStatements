@@ -42,9 +42,12 @@ CREATE TABLE bank_statements (
     statement_start_date DATE,
     statement_end_date DATE,
     status VARCHAR(30) NOT NULL DEFAULT 'uploaded',
+    scan_status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    scanned_at TIMESTAMPTZ,
     uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     processed_at TIMESTAMPTZ,
-    CHECK (statement_start_date IS NULL OR statement_end_date IS NULL OR statement_start_date <= statement_end_date)
+    CHECK (statement_start_date IS NULL OR statement_end_date IS NULL OR statement_start_date <= statement_end_date),
+    CHECK (scan_status IN ('pending', 'clean', 'infected', 'error'))
 );
 
 CREATE TABLE transaction_categories (

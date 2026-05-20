@@ -11,6 +11,7 @@ using Statements.WebAPI.Services.Auth;
 using Statements.WebAPI.Services.Statements;
 
 // Register Dapper type handler for DateOnly (required for Npgsql compatibility)
+
 SqlMapper.AddTypeHandler(new Statements.WebAPI.Infrastructure.DateOnlyHandler());
 
 var builder = WebApplication.CreateBuilder(args);
@@ -55,6 +56,8 @@ builder.Services.AddHttpClient("external-auth");
 builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddTransient<IStatementParser, PdfStatementParser>();
+builder.Services.Configure<ClamAvOptions>(builder.Configuration.GetSection(ClamAvOptions.SectionName));
+builder.Services.AddSingleton<IVirusScanService, ClamAvVirusScanService>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

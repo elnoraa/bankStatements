@@ -9,6 +9,7 @@ public sealed class StatementService : IStatementService
 {
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IStatementParser _statementParser;
+    private readonly IVirusScanService _virusScanService;
     private readonly IWebHostEnvironment _environment;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StatementService> _logger;
@@ -16,12 +17,14 @@ public sealed class StatementService : IStatementService
     public StatementService(
         IDbConnectionFactory connectionFactory,
         IStatementParser statementParser,
+        IVirusScanService virusScanService,
         IWebHostEnvironment environment,
         IConfiguration configuration,
         ILogger<StatementService> logger)
     {
         _connectionFactory = connectionFactory;
         _statementParser = statementParser;
+        _virusScanService = virusScanService;
         _environment = environment;
         _configuration = configuration;
         _logger = logger;
@@ -89,6 +92,31 @@ public sealed class StatementService : IStatementService
 
         _logger.LogDebug("File saved successfully: {SavedPath} ({Size} bytes, Hash={FileHash})", savedPath, file.Length, fileHash);
 
+        // STEP 4: Virus scan the uploaded file before processing
+        var scanResult = await _virusScanService.ScanAsync(savedPath, cancellationToken);
+
+        if (!scanResult.IsClean)
+        {
+            File.Delete(savedPath);
+            var virusName = scanResult.VirusName;
+            _logger.LogWarning(
+                "Upload rejected — virus detected in {FileName}: {VirusName} (scan took {DurationMs}ms)",
+                originalFileName, virusName ?? "unknown", scanResult.Duration.TotalMilliseconds);
+
+            if (virusName is not null)
+            {
+                throw new InvalidOperationException(
+                    $"Upload rejected: a virus was detected ({virusName}).");
+            }
+
+            throw new InvalidOperationException(
+                "Upload rejected: the file could not be verified as safe. Please try again later.");
+        }
+
+        _logger.LogInformation(
+            "Virus scan passed for {FileName} ({DurationMs}ms)",
+            originalFileName, scanResult.Duration.TotalMilliseconds);
+
         var existingStatementId = await connection.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 """
@@ -102,9 +130,23 @@ public sealed class StatementService : IStatementService
 
         if (existingStatementId is not null)
         {
-            _logger.LogWarning("Duplicate upload rejected - hash {FileHash} already exists for user {UserId}", fileHash, userId);
+            _logger.LogInformation("Duplicate file detected: {FileName} already uploaded as statement {StatementId}",
+                originalFileName, existingStatementId);
+
             File.Delete(savedPath);
-            throw new InvalidOperationException("This statement has already been uploaded.");
+
+            return new StatementUploadResponse(
+                Id: existingStatementId.Value,
+                UserId: userId,
+                BankAccountId: bankAccountId,
+                OriginalFileName: originalFileName,
+                StoredFileName: storedFileName,
+                FileHash: fileHash,
+                SizeInBytes: file.Length,
+                ContentType: file.ContentType,
+                Status: "uploaded",
+                UploadedAt: DateTimeOffset.UtcNow,
+                ParsedTransactionCount: 0);
         }
 
         try
