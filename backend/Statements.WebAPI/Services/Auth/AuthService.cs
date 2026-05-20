@@ -44,6 +44,7 @@ public sealed class AuthService : IAuthService
 
         using var connection = _connectionFactory.CreateConnection();
 
+        // Step 1: Look up by existing external_login mapping
         var existingUserId = await connection.QueryFirstOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 "SELECT user_id FROM external_logins WHERE provider = @Provider AND provider_key = @ProviderKey",
@@ -76,73 +77,86 @@ public sealed class AuthService : IAuthService
             return await CreateAuthResponseAsync(connection, user, cancellationToken);
         }
 
-        // No external login mapped yet. Try to find by email (if available).
-        Guid userId;
-        var normalizedEmail = !string.IsNullOrWhiteSpace(info.Email) ? NormalizeEmail(info.Email) : null;
-        if (normalizedEmail is not null)
+        // Step 2: No external_login mapping yet. Compute the email to use
+        // (fallback email ensures even users without a provider email can be identified).
+        var emailToInsert = info.Email ?? ($"{info.Provider}:{info.ProviderKey}@noemail.local");
+        var displayName = info.DisplayName ?? info.Email ?? "";
+        var normalizedEmail = NormalizeEmail(emailToInsert);
+
+        // Always check by email — even the fallback generated email — so a second login
+        // attempt after a partial failure re-links rather than crashes with a duplicate key.
+        var existingByEmail = await connection.QueryFirstOrDefaultAsync<Guid?>(
+            new CommandDefinition(
+                "SELECT id FROM app_users WHERE LOWER(email) = LOWER(@Email)",
+                new { Email = normalizedEmail },
+                cancellationToken: cancellationToken));
+
+        if (existingByEmail is not null)
         {
-            var existingByEmail = await connection.QueryFirstOrDefaultAsync<Guid?>(
+            var userId = existingByEmail.Value;
+            _logger.LogInformation("Linking external login {Provider} to existing user {UserId}", info.Provider, userId);
+
+            await connection.ExecuteAsync(
                 new CommandDefinition(
-                    "SELECT id FROM app_users WHERE LOWER(email) = LOWER(@Email)",
-                    new { Email = normalizedEmail },
+                    "INSERT INTO external_logins (user_id, provider, provider_key, display_name, email) VALUES (@UserId, @Provider, @ProviderKey, @DisplayName, @Email) ON CONFLICT (provider, provider_key) DO NOTHING",
+                    new { UserId = userId, Provider = info.Provider, ProviderKey = info.ProviderKey, DisplayName = info.DisplayName, Email = info.Email },
                     cancellationToken: cancellationToken));
 
-            if (existingByEmail is not null)
-            {
-                userId = existingByEmail.Value;
-                _logger.LogInformation("Linking external login {Provider} to existing user {UserId}", info.Provider, userId);
+            var user = await connection.QuerySingleAsync<AuthUser>(
+                new CommandDefinition(
+                    "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash FROM app_users WHERE id = @Id",
+                    new { Id = userId },
+                    cancellationToken: cancellationToken));
 
-                // link external login (avoid duplicate error)
+            if (!user.EmailVerified && info.EmailVerified)
+            {
+                _logger.LogInformation("Updating email_verified for user {UserId} after external login link", user.Id);
                 await connection.ExecuteAsync(
                     new CommandDefinition(
-                        "INSERT INTO external_logins (user_id, provider, provider_key, display_name, email) VALUES (@UserId, @Provider, @ProviderKey, @DisplayName, @Email) ON CONFLICT (provider, provider_key) DO NOTHING",
-                        new { UserId = userId, Provider = info.Provider, ProviderKey = info.ProviderKey, DisplayName = info.DisplayName, Email = info.Email },
+                        "UPDATE app_users SET email_verified = TRUE, updated_at = NOW() WHERE id = @Id",
+                        new { Id = user.Id },
                         cancellationToken: cancellationToken));
-
-                // if provider verified email, ensure app marks email_verified
-                var user = await connection.QuerySingleAsync<AuthUser>(
-                    new CommandDefinition(
-                        "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash FROM app_users WHERE id = @Id",
-                        new { Id = userId },
-                        cancellationToken: cancellationToken));
-
-                if (!user.EmailVerified && info.EmailVerified)
-                {
-                    _logger.LogInformation("Updating email_verified for user {UserId} after external login link", user.Id);
-                    await connection.ExecuteAsync(
-                        new CommandDefinition(
-                            "UPDATE app_users SET email_verified = TRUE, updated_at = NOW() WHERE id = @Id",
-                            new { Id = user.Id },
-                            cancellationToken: cancellationToken));
-                    user = user with { EmailVerified = true };
-                }
-
-                _logger.LogInformation("External login linked successfully for user {UserId}", user.Id);
-                return await CreateAuthResponseAsync(connection, user, cancellationToken);
+                user = user with { EmailVerified = true };
             }
+
+            _logger.LogInformation("External login linked successfully for user {UserId}", user.Id);
+            return await CreateAuthResponseAsync(connection, user, cancellationToken);
         }
 
-        // Create a new user
+        // Step 3: Truly new user — create both rows inside a transaction for atomicity.
         _logger.LogInformation("Creating new user from external login: Provider={Provider}, ProviderKey={ProviderKey}", info.Provider, info.ProviderKey);
 
-        var displayName = info.DisplayName ?? info.Email ?? "";
-        var emailToInsert = info.Email ?? ($"{info.Provider}:{info.ProviderKey}@noemail.local");
-        var newUser = await connection.QuerySingleAsync<AuthUser>(
-            new CommandDefinition(
-                "INSERT INTO app_users (email, display_name, password_hash, email_verified) VALUES (@Email, @DisplayName, NULL, @EmailVerified) RETURNING id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash",
-                new { Email = emailToInsert, DisplayName = displayName, EmailVerified = info.EmailVerified },
-                cancellationToken: cancellationToken));
+        connection.Open();
+        using var transaction = connection.BeginTransaction();
+        try
+        {
+            // Use ON CONFLICT as a safety net for concurrent requests
+            var newUser = await connection.QuerySingleAsync<AuthUser>(
+                new CommandDefinition(
+                    "INSERT INTO app_users (email, display_name, password_hash, email_verified) VALUES (@Email, @DisplayName, NULL, @EmailVerified) RETURNING id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash",
+                    new { Email = emailToInsert, DisplayName = displayName, EmailVerified = info.EmailVerified },
+                    transaction: transaction,
+                    cancellationToken: cancellationToken));
 
-        _logger.LogInformation("New user {UserId} created from external login", newUser.Id);
+            _logger.LogInformation("New user {UserId} created from external login", newUser.Id);
 
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                "INSERT INTO external_logins (user_id, provider, provider_key, display_name, email) VALUES (@UserId, @Provider, @ProviderKey, @DisplayName, @Email)",
-                new { UserId = newUser.Id, Provider = info.Provider, ProviderKey = info.ProviderKey, DisplayName = info.DisplayName, Email = info.Email },
-                cancellationToken: cancellationToken));
+            await connection.ExecuteAsync(
+                new CommandDefinition(
+                    "INSERT INTO external_logins (user_id, provider, provider_key, display_name, email) VALUES (@UserId, @Provider, @ProviderKey, @DisplayName, @Email)",
+                    new { UserId = newUser.Id, Provider = info.Provider, ProviderKey = info.ProviderKey, DisplayName = info.DisplayName, Email = info.Email },
+                    transaction: transaction,
+                    cancellationToken: cancellationToken));
 
-        _logger.LogInformation("External login successful for new user {UserId}", newUser.Id);
-        return await CreateAuthResponseAsync(connection, newUser, cancellationToken);
+            transaction.Commit();
+
+            _logger.LogInformation("External login successful for new user {UserId}", newUser.Id);
+            return await CreateAuthResponseAsync(connection, newUser, cancellationToken);
+        }
+        catch
+        {
+            transaction.Rollback();
+            throw;
+        }
     }
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)

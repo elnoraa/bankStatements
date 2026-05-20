@@ -27,7 +27,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("register")]
-    [EnableRateLimiting("Auth")]
+    [EnableRateLimiting("AuthStrict")]
     public async Task<ActionResult<CookieAuthResponse>> Register(
         RegisterRequest request,
         CancellationToken cancellationToken)
@@ -55,7 +55,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("login")]
-    [EnableRateLimiting("Auth")]
+    [EnableRateLimiting("AuthStrict")]
     public async Task<ActionResult<CookieAuthResponse>> Login(
         LoginRequest request,
         CancellationToken cancellationToken)
@@ -88,7 +88,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("refresh")]
-    [EnableRateLimiting("Auth")]
+    [EnableRateLimiting("AuthDefault")]
     public async Task<ActionResult<CookieAuthResponse>> Refresh(
         CancellationToken cancellationToken)
     {
@@ -141,7 +141,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("external")]
-    [EnableRateLimiting("Auth")]
+    [EnableRateLimiting("AuthDefault")]
     public async Task<ActionResult<CookieAuthResponse>> External(
         ExternalLoginRequest request,
         CancellationToken cancellationToken)
@@ -169,7 +169,7 @@ public sealed class AuthController : ControllerBase
     }
 
     [HttpPost("external/code")]
-    [EnableRateLimiting("Auth")]
+    [EnableRateLimiting("AuthModerate")]
     public async Task<ActionResult<CookieAuthResponse>> ExternalCode(
         ExternalCodeRequest request,
         CancellationToken cancellationToken)

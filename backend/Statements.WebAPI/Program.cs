@@ -12,9 +12,10 @@ using Statements.WebAPI.Services.Analysis;
 using Statements.WebAPI.Services.Auth;
 using Statements.WebAPI.Services.Statements;
 
-// Register Dapper type handler for DateOnly (required for Npgsql compatibility)
+// Register Dapper type handlers for DateOnly (required for Npgsql compatibility)
 
 SqlMapper.AddTypeHandler(new Statements.WebAPI.Infrastructure.DateOnlyHandler());
+SqlMapper.AddTypeHandler(new Statements.WebAPI.Infrastructure.NullableDateOnlyHandler());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -43,34 +44,55 @@ builder.Services.AddCors(options =>
     options.AddPolicy("Frontend", policy =>
     {
         policy
-            .WithOrigins("http://localhost:3000")
+            .WithOrigins("http://localhost:3000", "http://127.0.0.1:3000")
             .WithHeaders("Authorization", "Content-Type", "X-Requested-With")
             .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .AllowCredentials();
     });
 });
 
-// Configure cookie policy for httpOnly refresh tokens
-builder.Services.Configure<CookiePolicyOptions>(options =>
-{
-    options.MinimumSameSitePolicy = SameSiteMode.Strict;
-    options.HttpOnly = HttpOnlyPolicy.Always;
-    options.Secure = CookieSecurePolicy.SameAsRequest;
-});
-
-// Add rate limiting for auth endpoints
+// Add rate limiting for auth endpoints (IP-partitioned)
 builder.Services.AddRateLimiter(rateLimiterOptions =>
 {
     rateLimiterOptions.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 
-    rateLimiterOptions.AddFixedWindowLimiter("Auth", options =>
-    {
-        options.PermitLimit = 5;
-        options.Window = TimeSpan.FromMinutes(15);
-        options.QueueProcessingOrder = QueueProcessingOrder.OldestFirst;
-        options.QueueLimit = 0;
-    });
+    // Strict: login/register — 2 req / 15 min per IP
+    rateLimiterOptions.AddPolicy("AuthStrict", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 2,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 
+    // Moderate: external/code (OAuth callback) — 10 req / 15 min per IP
+    rateLimiterOptions.AddPolicy("AuthModerate", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // Default: refresh/external — 5 req / 15 min per IP
+    rateLimiterOptions.AddPolicy("AuthDefault", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
+
+    // General API rate limit (global, not IP-partitioned)
     rateLimiterOptions.AddFixedWindowLimiter("Api", options =>
     {
         options.PermitLimit = 100;
@@ -111,7 +133,7 @@ builder.Services.AddAuthorization();
 var app = builder.Build();
 
 // Startup validation: fail fast if required secrets are missing or placeholder
-ValidateConfiguration(builder.Configuration, app.Services.GetRequiredService<ILogger<Program>>());
+ValidateConfiguration(builder.Configuration, app.Services.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Program>>());
 
 if (app.Environment.IsDevelopment())
 {
@@ -164,7 +186,7 @@ app.MapControllers();
 
 app.Run();
 
-static void ValidateConfiguration(IConfiguration configuration, ILogger logger)
+static void ValidateConfiguration(IConfiguration configuration, Microsoft.Extensions.Logging.ILogger logger)
 {
     var requiredVars = new (string Key, string Name)[]
     {

@@ -13,6 +13,6 @@ public sealed class ExternalCodeRequest
     [Required]
     public string CodeVerifier { get; init; } = null!;
 
-    [Required, Url]
+    [Required]
     public string RedirectUri { get; init; } = null!;
 }

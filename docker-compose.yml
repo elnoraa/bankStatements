@@ -62,6 +62,7 @@ services:
       - ExternalProviders__Google__ClientSecret=${ExternalProviders__Google__ClientSecret:-}
       - ClamAv__Host=${CLAMAV_HOST}
       - ClamAv__Port=${CLAMAV_PORT}
+      - TZ=Australia/Sydney
     volumes:
       - ./backend/Statements.WebAPI:/app
       - ./backend/Uploads:/uploads

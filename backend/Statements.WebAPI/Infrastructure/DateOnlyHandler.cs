@@ -17,3 +17,29 @@ internal sealed class DateOnlyHandler : SqlMapper.TypeHandler<DateOnly>
         parameter.Value = value.ToDateTime(TimeOnly.MinValue);
     }
 }
+
+/// <summary>
+/// Handler for nullable DateOnly values used as Dapper query parameters.
+/// </summary>
+internal sealed class NullableDateOnlyHandler : SqlMapper.TypeHandler<DateOnly?>
+{
+    public override DateOnly? Parse(object value)
+    {
+        if (value is null || value == DBNull.Value)
+            return null;
+        return DateOnly.FromDateTime((DateTime)value);
+    }
+
+    public override void SetValue(IDbDataParameter parameter, DateOnly? value)
+    {
+        if (value.HasValue)
+        {
+            parameter.DbType = DbType.Date;
+            parameter.Value = value.Value.ToDateTime(TimeOnly.MinValue);
+        }
+        else
+        {
+            parameter.Value = DBNull.Value;
+        }
+    }
+}
