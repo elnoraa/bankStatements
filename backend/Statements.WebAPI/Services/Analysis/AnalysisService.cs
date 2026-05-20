@@ -6,12 +6,12 @@ namespace Statements.WebAPI.Services.Analysis;
 
 public sealed class AnalysisService : IAnalysisService
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IDbExecutor _dbExecutor;
     private readonly ILogger<AnalysisService> _logger;
 
-    public AnalysisService(IDbConnectionFactory connectionFactory, ILogger<AnalysisService> logger)
+    public AnalysisService(IDbExecutor dbExecutor, ILogger<AnalysisService> logger)
     {
-        _connectionFactory = connectionFactory;
+        _dbExecutor = dbExecutor;
         _logger = logger;
     }
 
@@ -25,7 +25,6 @@ public sealed class AnalysisService : IAnalysisService
         _logger.LogInformation("Getting spending summary for user {UserId}, bankAccountId: {BankAccountId}, from: {From}, to: {To}",
             userId, bankAccountId, from, to);
 
-        using var connection = _connectionFactory.CreateConnection();
         var parameters = new
         {
             UserId = userId,
@@ -34,7 +33,7 @@ public sealed class AnalysisService : IAnalysisService
             To = to
         };
 
-        var totals = await connection.QuerySingleAsync<CashflowTotals>(
+        var totals = await _dbExecutor.QuerySingleAsync<CashflowTotals>(
             new CommandDefinition(
                 """
                 SELECT
@@ -52,7 +51,7 @@ public sealed class AnalysisService : IAnalysisService
                 parameters,
                 cancellationToken: cancellationToken));
 
-        var spendingByCategory = (await connection.QueryAsync<CategorySpendingResponse>(
+        var spendingByCategory = (await _dbExecutor.QueryAsync<CategorySpendingResponse>(
             new CommandDefinition(
                 """
                 SELECT
@@ -73,7 +72,7 @@ public sealed class AnalysisService : IAnalysisService
                 parameters,
                 cancellationToken: cancellationToken))).AsList();
 
-        var recentTransactions = (await connection.QueryAsync<RecentTransactionResponse>(
+        var recentTransactions = (await _dbExecutor.QueryAsync<RecentTransactionResponse>(
             new CommandDefinition(
                 """
                 SELECT
@@ -113,7 +112,7 @@ public sealed class AnalysisService : IAnalysisService
             recentTransactions);
     }
 
-    private sealed class CashflowTotals
+    internal sealed class CashflowTotals
     {
         public DateOnly? PeriodStart { get; init; }
         public DateOnly? PeriodEnd { get; init; }

@@ -106,6 +106,7 @@ builder.Services.AddRateLimiter(rateLimiterOptions =>
     });
 });
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
+builder.Services.AddScoped<IDbExecutor, DapperDbExecutor>();
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();

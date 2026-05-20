@@ -51,7 +51,7 @@ public sealed partial class PdfStatementParser : IStatementParser
         return transactions;
     }
 
-    private static ParsedStatementTransaction? TryParseLine(string line)
+    internal static ParsedStatementTransaction? TryParseLine(string line)
     {
         var dateMatch = DateAtStartRegex().Match(line);
 
@@ -104,7 +104,7 @@ public sealed partial class PdfStatementParser : IStatementParser
             categoryName);
     }
 
-    private static bool TryParseDate(string value, out DateOnly date)
+    internal static bool TryParseDate(string value, out DateOnly date)
     {
         var formats = new[]
         {
@@ -128,7 +128,7 @@ public sealed partial class PdfStatementParser : IStatementParser
             out date);
     }
 
-    private static bool TryParseMoney(string value, out decimal amount)
+    internal static bool TryParseMoney(string value, out decimal amount)
     {
         var cleaned = value
             .Replace("$", string.Empty, StringComparison.Ordinal)
@@ -151,7 +151,7 @@ public sealed partial class PdfStatementParser : IStatementParser
         return true;
     }
 
-    private static string InferTransactionType(string description, decimal amount)
+    internal static string InferTransactionType(string description, decimal amount)
     {
         if (amount < 0)
         {
@@ -166,7 +166,7 @@ public sealed partial class PdfStatementParser : IStatementParser
             : "debit";
     }
 
-    private static string InferCategory(string description, string transactionType)
+    internal static string InferCategory(string description, string transactionType)
     {
         var normalized = description.ToLowerInvariant();
 

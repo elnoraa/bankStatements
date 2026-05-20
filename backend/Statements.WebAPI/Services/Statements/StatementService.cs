@@ -7,7 +7,7 @@ namespace Statements.WebAPI.Services.Statements;
 
 public sealed class StatementService : IStatementService
 {
-    private readonly IDbConnectionFactory _connectionFactory;
+    private readonly IDbExecutor _dbExecutor;
     private readonly IStatementParser _statementParser;
     private readonly IVirusScanService _virusScanService;
     private readonly IWebHostEnvironment _environment;
@@ -15,14 +15,14 @@ public sealed class StatementService : IStatementService
     private readonly ILogger<StatementService> _logger;
 
     public StatementService(
-        IDbConnectionFactory connectionFactory,
+        IDbExecutor dbExecutor,
         IStatementParser statementParser,
         IVirusScanService virusScanService,
         IWebHostEnvironment environment,
         IConfiguration configuration,
         ILogger<StatementService> logger)
     {
-        _connectionFactory = connectionFactory;
+        _dbExecutor = dbExecutor;
         _statementParser = statementParser;
         _virusScanService = virusScanService;
         _environment = environment;
@@ -45,11 +45,9 @@ public sealed class StatementService : IStatementService
             throw new InvalidOperationException("Only PDF bank statements are supported.");
         }
 
-        using var connection = _connectionFactory.CreateConnection();
-
         if (bankAccountId is not null)
         {
-            var accountBelongsToUser = await connection.QuerySingleAsync<bool>(
+            var accountBelongsToUser = await _dbExecutor.QuerySingleAsync<bool>(
                 new CommandDefinition(
                     """
                     SELECT EXISTS (
@@ -117,7 +115,7 @@ public sealed class StatementService : IStatementService
             "Virus scan passed for {FileName} ({DurationMs}ms)",
             originalFileName, scanResult.Duration.TotalMilliseconds);
 
-        var existingStatementId = await connection.QuerySingleOrDefaultAsync<Guid?>(
+        var existingStatementId = await _dbExecutor.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 """
                 SELECT id
@@ -155,7 +153,7 @@ public sealed class StatementService : IStatementService
         {
             _logger.LogInformation("Inserting bank statement record for file: {OriginalFileName}", originalFileName);
 
-            var statement = await connection.QuerySingleAsync<StatementUploadResponse>(
+            var statement = await _dbExecutor.QuerySingleAsync<StatementUploadResponse>(
                 new CommandDefinition(
                     """
                     INSERT INTO bank_statements (
@@ -208,12 +206,12 @@ public sealed class StatementService : IStatementService
             var transactions = _statementParser.Parse(savedPath);
             _logger.LogInformation("Parsed {TransactionCount} transactions from statement {StatementId}", transactions.Count, statement.Id);
 
-            await InsertTransactionsAsync(connection, statement.Id, bankAccountId, transactions, cancellationToken);
+            await InsertTransactionsAsync(statement.Id, bankAccountId, transactions, cancellationToken);
 
             _logger.LogInformation("Marking statement {StatementId} as processed with {TransactionCount} transactions",
                 statement.Id, transactions.Count);
 
-            var processedStatement = await connection.QuerySingleAsync<StatementUploadResponse>(
+            var processedStatement = await _dbExecutor.QuerySingleAsync<StatementUploadResponse>(
                 new CommandDefinition(
                     """
                     UPDATE bank_statements
@@ -252,7 +250,7 @@ public sealed class StatementService : IStatementService
         {
             _logger.LogError(ex, "Failed to process statement upload: {FileName}", originalFileName);
 
-            await connection.ExecuteAsync(
+            await _dbExecutor.ExecuteAsync(
                 new CommandDefinition(
                     """
                     UPDATE bank_statements
@@ -268,7 +266,6 @@ public sealed class StatementService : IStatementService
     }
 
     private async Task InsertTransactionsAsync(
-        System.Data.IDbConnection connection,
         Guid statementId,
         Guid? bankAccountId,
         IReadOnlyList<ParsedStatementTransaction> transactions,
@@ -280,7 +277,7 @@ public sealed class StatementService : IStatementService
         {
             var transaction = transactions[index];
 
-            await connection.ExecuteAsync(
+            await _dbExecutor.ExecuteAsync(
                 new CommandDefinition(
                     """
                     INSERT INTO statement_transactions (

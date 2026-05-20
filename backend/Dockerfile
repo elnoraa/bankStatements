@@ -1,4 +1,22 @@
-FROM mcr.microsoft.com/dotnet/sdk:10.0
+# ── Test stage ──────────────────────────────────────────────
+# Builds and runs unit tests. The runtime stage depends on this
+# completing successfully (exit code 0).
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS test
+WORKDIR /app
+
+# Copy project files and restore
+COPY Statements.WebAPI/Statements.WebAPI.csproj ./Statements.WebAPI/
+COPY Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj ./Statements.WebAPI.Tests/
+RUN dotnet restore Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj
+
+# Copy source code
+COPY Statements.WebAPI/ ./Statements.WebAPI/
+COPY Statements.WebAPI.Tests/ ./Statements.WebAPI.Tests/
+
+ENTRYPOINT ["dotnet", "test", "Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj", "--logger", "console;verbosity=detailed"]
+
+# ── Runtime stage ────────────────────────────────────────────
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
 # Install curl for health checks

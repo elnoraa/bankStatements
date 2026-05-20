@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Security.Claims;
 using System.Threading;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
@@ -62,9 +63,15 @@ public sealed class ExternalAuthValidator : IExternalAuthValidator
             var principal = handler.ValidateToken(idToken, validationParameters, out var validatedToken);
             var jwt = (JwtSecurityToken)validatedToken;
             var providerKey = jwt.Subject ?? principal.FindFirst("sub")?.Value ?? throw new SecurityTokenException("No subject");
-            var email = principal.FindFirst("email")?.Value;
-            var emailVerified = bool.TryParse(principal.FindFirst("email_verified")?.Value, out var v) && v;
-            var name = principal.FindFirst("name")?.Value ?? principal.FindFirst("preferred_username")?.Value;
+            // Read claims from the JWT token directly to avoid MapInboundClaims mapping issues
+            var email = jwt.Claims.FirstOrDefault(c => c.Type == "email")?.Value
+                        ?? principal.FindFirst(ClaimTypes.Email)?.Value;
+            var emailVerifiedStr = jwt.Claims.FirstOrDefault(c => c.Type == "email_verified")?.Value
+                                   ?? principal.FindFirst("email_verified")?.Value;
+            var emailVerified = bool.TryParse(emailVerifiedStr, out var v) && v;
+            var name = jwt.Claims.FirstOrDefault(c => c.Type == "name")?.Value
+                       ?? jwt.Claims.FirstOrDefault(c => c.Type == "preferred_username")?.Value
+                       ?? principal.FindFirst(ClaimTypes.Name)?.Value;
 
             _logger.LogInformation("External token validated successfully: Provider={Provider}, ProviderKey={ProviderKey}", provider, providerKey);
             return new ExternalUserInfo(provider, providerKey, email, name, emailVerified);

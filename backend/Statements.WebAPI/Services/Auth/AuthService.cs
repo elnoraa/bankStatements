@@ -10,6 +10,7 @@ namespace Statements.WebAPI.Services.Auth;
 
 public sealed class AuthService : IAuthService
 {
+    private readonly IDbExecutor _dbExecutor;
     private readonly IDbConnectionFactory _connectionFactory;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IJwtTokenService _jwtTokenService;
@@ -18,6 +19,7 @@ public sealed class AuthService : IAuthService
     private readonly ILogger<AuthService> _logger;
 
     public AuthService(
+        IDbExecutor dbExecutor,
         IDbConnectionFactory connectionFactory,
         IPasswordHasher passwordHasher,
         IJwtTokenService jwtTokenService,
@@ -25,6 +27,7 @@ public sealed class AuthService : IAuthService
         IExternalAuthValidator externalAuthValidator,
         ILogger<AuthService> logger)
     {
+        _dbExecutor = dbExecutor;
         _connectionFactory = connectionFactory;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
@@ -45,7 +48,7 @@ public sealed class AuthService : IAuthService
         using var connection = _connectionFactory.CreateConnection();
 
         // Step 1: Look up by existing external_login mapping
-        var existingUserId = await connection.QueryFirstOrDefaultAsync<Guid?>(
+        var existingUserId = await _dbExecutor.QueryFirstOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 "SELECT user_id FROM external_logins WHERE provider = @Provider AND provider_key = @ProviderKey",
                 new { Provider = info.Provider, ProviderKey = info.ProviderKey },
@@ -55,7 +58,7 @@ public sealed class AuthService : IAuthService
         {
             _logger.LogDebug("Existing external login found for user {UserId}", existingUserId.Value);
 
-            var user = await connection.QuerySingleAsync<AuthUser>(
+            var user = await _dbExecutor.QuerySingleAsync<AuthUser>(
                 new CommandDefinition(
                     "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash FROM app_users WHERE id = @Id",
                     new { Id = existingUserId.Value },
@@ -65,7 +68,7 @@ public sealed class AuthService : IAuthService
             if (!user.EmailVerified && info.EmailVerified && !string.IsNullOrWhiteSpace(user.Email))
             {
                 _logger.LogInformation("Updating email_verified for user {UserId}", user.Id);
-                await connection.ExecuteAsync(
+                await _dbExecutor.ExecuteAsync(
                     new CommandDefinition(
                         "UPDATE app_users SET email_verified = TRUE, updated_at = NOW() WHERE id = @Id",
                         new { Id = user.Id },
@@ -74,7 +77,7 @@ public sealed class AuthService : IAuthService
             }
 
             _logger.LogInformation("External login successful for existing user {UserId}", user.Id);
-            return await CreateAuthResponseAsync(connection, user, cancellationToken);
+            return await CreateAuthResponseAsync(user, cancellationToken);
         }
 
         // Step 2: No external_login mapping yet. Compute the email to use
@@ -85,7 +88,7 @@ public sealed class AuthService : IAuthService
 
         // Always check by email — even the fallback generated email — so a second login
         // attempt after a partial failure re-links rather than crashes with a duplicate key.
-        var existingByEmail = await connection.QueryFirstOrDefaultAsync<Guid?>(
+        var existingByEmail = await _dbExecutor.QueryFirstOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 "SELECT id FROM app_users WHERE LOWER(email) = LOWER(@Email)",
                 new { Email = normalizedEmail },
@@ -96,13 +99,13 @@ public sealed class AuthService : IAuthService
             var userId = existingByEmail.Value;
             _logger.LogInformation("Linking external login {Provider} to existing user {UserId}", info.Provider, userId);
 
-            await connection.ExecuteAsync(
+            await _dbExecutor.ExecuteAsync(
                 new CommandDefinition(
                     "INSERT INTO external_logins (user_id, provider, provider_key, display_name, email) VALUES (@UserId, @Provider, @ProviderKey, @DisplayName, @Email) ON CONFLICT (provider, provider_key) DO NOTHING",
                     new { UserId = userId, Provider = info.Provider, ProviderKey = info.ProviderKey, DisplayName = info.DisplayName, Email = info.Email },
                     cancellationToken: cancellationToken));
 
-            var user = await connection.QuerySingleAsync<AuthUser>(
+            var user = await _dbExecutor.QuerySingleAsync<AuthUser>(
                 new CommandDefinition(
                     "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash FROM app_users WHERE id = @Id",
                     new { Id = userId },
@@ -111,7 +114,7 @@ public sealed class AuthService : IAuthService
             if (!user.EmailVerified && info.EmailVerified)
             {
                 _logger.LogInformation("Updating email_verified for user {UserId} after external login link", user.Id);
-                await connection.ExecuteAsync(
+                await _dbExecutor.ExecuteAsync(
                     new CommandDefinition(
                         "UPDATE app_users SET email_verified = TRUE, updated_at = NOW() WHERE id = @Id",
                         new { Id = user.Id },
@@ -120,7 +123,7 @@ public sealed class AuthService : IAuthService
             }
 
             _logger.LogInformation("External login linked successfully for user {UserId}", user.Id);
-            return await CreateAuthResponseAsync(connection, user, cancellationToken);
+            return await CreateAuthResponseAsync(user, cancellationToken);
         }
 
         // Step 3: Truly new user — create both rows inside a transaction for atomicity.
@@ -150,7 +153,7 @@ public sealed class AuthService : IAuthService
             transaction.Commit();
 
             _logger.LogInformation("External login successful for new user {UserId}", newUser.Id);
-            return await CreateAuthResponseAsync(connection, newUser, cancellationToken);
+            return await CreateAuthResponseAsync(newUser, cancellationToken);
         }
         catch
         {
@@ -164,8 +167,7 @@ public sealed class AuthService : IAuthService
         var email = NormalizeEmail(request.Email);
         _logger.LogInformation("User registration attempt for email: {Email}", email);
 
-        using var connection = _connectionFactory.CreateConnection();
-        var existingUserId = await connection.QueryFirstOrDefaultAsync<Guid?>(
+        var existingUserId = await _dbExecutor.QueryFirstOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 "SELECT id FROM app_users WHERE LOWER(email) = LOWER(@Email)",
                 new { Email = email },
@@ -182,7 +184,7 @@ public sealed class AuthService : IAuthService
         var displayName = string.IsNullOrWhiteSpace(request.DisplayName)
             ? email.Split('@')[0]
             : request.DisplayName.Trim();
-        var user = await connection.QuerySingleAsync<AuthUser>(
+        var user = await _dbExecutor.QuerySingleAsync<AuthUser>(
             new CommandDefinition(
                 """
                 INSERT INTO app_users (email, display_name, password_hash)
@@ -203,7 +205,7 @@ public sealed class AuthService : IAuthService
                 cancellationToken: cancellationToken));
 
         _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
-        return await CreateAuthResponseAsync(connection, user, cancellationToken);
+        return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
@@ -211,8 +213,7 @@ public sealed class AuthService : IAuthService
         var email = NormalizeEmail(request.Email);
         _logger.LogInformation("Login attempt for email: {Email}", email);
 
-        using var connection = _connectionFactory.CreateConnection();
-        var user = await connection.QueryFirstOrDefaultAsync<AuthUser>(
+        var user = await _dbExecutor.QueryFirstOrDefaultAsync<AuthUser>(
             new CommandDefinition(
                 """
                 SELECT
@@ -243,7 +244,7 @@ public sealed class AuthService : IAuthService
             // Track failed login attempt for existing users
             if (user is not null)
             {
-                await connection.ExecuteAsync(
+                await _dbExecutor.ExecuteAsync(
                     new CommandDefinition(
                         """
                         UPDATE app_users
@@ -263,14 +264,14 @@ public sealed class AuthService : IAuthService
         }
 
         // Reset failed attempts on successful login
-        await connection.ExecuteAsync(
+        await _dbExecutor.ExecuteAsync(
             new CommandDefinition(
                 "UPDATE app_users SET failed_login_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE id = @Id",
                 new { Id = user.Id },
                 cancellationToken: cancellationToken));
 
         _logger.LogInformation("Login successful: UserId={UserId}, Email={Email}", user.Id, user.Email);
-        return await CreateAuthResponseAsync(connection, user, cancellationToken);
+        return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken)
@@ -279,8 +280,7 @@ public sealed class AuthService : IAuthService
 
         var tokenHash = HashRefreshToken(refreshToken);
 
-        using var connection = _connectionFactory.CreateConnection();
-        var storedToken = await connection.QueryFirstOrDefaultAsync<(Guid Id, Guid UserId, DateTime ExpiresAt, DateTime? RevokedAt)>(
+        var storedToken = await _dbExecutor.QueryFirstOrDefaultAsync<(Guid Id, Guid UserId, DateTime ExpiresAt, DateTime? RevokedAt)>(
             new CommandDefinition(
                 "SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = @TokenHash",
                 new { TokenHash = tokenHash },
@@ -305,7 +305,7 @@ public sealed class AuthService : IAuthService
         }
 
         // Revoke the old refresh token (rotation)
-        await connection.ExecuteAsync(
+        await _dbExecutor.ExecuteAsync(
             new CommandDefinition(
                 "UPDATE refresh_tokens SET revoked_at = NOW() WHERE id = @Id",
                 new { Id = storedToken.Id },
@@ -313,13 +313,13 @@ public sealed class AuthService : IAuthService
 
         _logger.LogDebug("Old refresh token revoked for user {UserId}", storedToken.UserId);
 
-        var user = await connection.QuerySingleAsync<AuthUser>(
+        var user = await _dbExecutor.QuerySingleAsync<AuthUser>(
             new CommandDefinition(
                 "SELECT id AS Id, email AS Email, display_name AS DisplayName, email_verified AS EmailVerified, password_hash AS PasswordHash, failed_login_attempts AS FailedLoginAttempts, locked_until AS LockedUntil FROM app_users WHERE id = @Id",
                 new { Id = storedToken.UserId },
                 cancellationToken: cancellationToken));
 
-        return await CreateAuthResponseAsync(connection, user, cancellationToken);
+        return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
     public async Task RevokeTokenAsync(string refreshToken, CancellationToken cancellationToken)
@@ -328,8 +328,7 @@ public sealed class AuthService : IAuthService
 
         var tokenHash = HashRefreshToken(refreshToken);
 
-        using var connection = _connectionFactory.CreateConnection();
-        await connection.ExecuteAsync(
+        await _dbExecutor.ExecuteAsync(
             new CommandDefinition(
                 "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token_hash = @TokenHash AND revoked_at IS NULL",
                 new { TokenHash = tokenHash },
@@ -339,7 +338,6 @@ public sealed class AuthService : IAuthService
     }
 
     private async Task<AuthResponse> CreateAuthResponseAsync(
-        System.Data.IDbConnection connection,
         AuthUser user,
         CancellationToken cancellationToken)
     {
@@ -349,7 +347,7 @@ public sealed class AuthService : IAuthService
         var refreshToken = GenerateRefreshToken();
         var refreshTokenExpiresAt = DateTimeOffset.UtcNow.AddDays(_jwtOptions.RefreshTokenDays);
 
-        await connection.ExecuteAsync(
+        await _dbExecutor.ExecuteAsync(
             new CommandDefinition(
                 """
                 INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
