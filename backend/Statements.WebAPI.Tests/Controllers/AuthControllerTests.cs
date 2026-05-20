@@ -11,6 +11,9 @@ using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Tests.Controllers;
 
+/// <summary>
+/// Unit tests for the <see cref="AuthController"/>.
+/// </summary>
 public sealed class AuthControllerTests
 {
     private readonly Mock<IAuthService> _authServiceMock = new();
@@ -19,6 +22,10 @@ public sealed class AuthControllerTests
     private readonly AuthController _sut;
     private readonly DefaultHttpContext _httpContext;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuthControllerTests"/> class.
+    /// Sets up the controller, mocks, and HTTP context.
+    /// </summary>
     public AuthControllerTests()
     {
         _configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
@@ -37,11 +44,19 @@ public sealed class AuthControllerTests
         };
     }
 
+    /// <summary>
+    /// Sets a refresh token cookie on the HTTP request for testing.
+    /// </summary>
+    /// <param name="token">The refresh token value.</param>
     private void SetRefreshTokenCookie(string token)
     {
         _httpContext.Request.Headers["Cookie"] = $"refresh_token={token}";
     }
 
+    /// <summary>
+    /// Creates a test <see cref="AuthResponse"/> with predetermined values.
+    /// </summary>
+    /// <returns>A populated <see cref="AuthResponse"/> for use in test setups.</returns>
     private static AuthResponse CreateTestAuthResponse()
     {
         return new AuthResponse(
@@ -54,6 +69,9 @@ public sealed class AuthControllerTests
 
     // ── Register ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that a valid registration request returns 201 Created with tokens and a Set-Cookie header.
+    /// </summary>
     [Fact]
     public async Task Register_WithValidRequest_ReturnsCreated()
     {
@@ -75,6 +93,9 @@ public sealed class AuthControllerTests
         _sut.Response.Headers.Should().ContainKey("Set-Cookie");
     }
 
+    /// <summary>
+    /// Verifies that registering with a duplicate email returns 409 Conflict.
+    /// </summary>
     [Fact]
     public async Task Register_WithDuplicateEmail_ReturnsConflict()
     {
@@ -91,6 +112,9 @@ public sealed class AuthControllerTests
 
     // ── Login ──────────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that a login with valid credentials returns 200 OK with tokens and a Set-Cookie header.
+    /// </summary>
     [Fact]
     public async Task Login_WithValidCredentials_ReturnsOk()
     {
@@ -111,6 +135,9 @@ public sealed class AuthControllerTests
         _sut.Response.Headers.Should().ContainKey("Set-Cookie");
     }
 
+    /// <summary>
+    /// Verifies that a login with invalid credentials returns 401 Unauthorized.
+    /// </summary>
     [Fact]
     public async Task Login_WithInvalidCredentials_ReturnsUnauthorized()
     {
@@ -125,6 +152,9 @@ public sealed class AuthControllerTests
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that a login attempt on a locked account returns 401 with the lockedUntil timestamp.
+    /// </summary>
     [Fact]
     public async Task Login_WithLockedAccount_ReturnsUnauthorizedWithLockedUntil()
     {
@@ -145,6 +175,9 @@ public sealed class AuthControllerTests
 
     // ── Refresh ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that a valid refresh token cookie returns 200 OK with new tokens.
+    /// </summary>
     [Fact]
     public async Task Refresh_WithValidCookie_ReturnsOk()
     {
@@ -160,6 +193,9 @@ public sealed class AuthControllerTests
         result.Result.Should().BeOfType<OkObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that a missing refresh token cookie returns 401 Unauthorized without calling the service.
+    /// </summary>
     [Fact]
     public async Task Refresh_WithMissingCookie_ReturnsUnauthorized()
     {
@@ -169,6 +205,9 @@ public sealed class AuthControllerTests
         _authServiceMock.Verify(x => x.RefreshTokenAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
+    /// <summary>
+    /// Verifies that an invalid refresh token returns 401 and clears the cookie.
+    /// </summary>
     [Fact]
     public async Task Refresh_WithInvalidToken_ReturnsUnauthorizedAndClearsCookie()
     {
@@ -186,6 +225,9 @@ public sealed class AuthControllerTests
 
     // ── Logout ─────────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that logout with a cookie revokes the token and clears the cookie.
+    /// </summary>
     [Fact]
     public async Task Logout_WithCookie_CallsRevokeAndClearsCookie()
     {
@@ -202,6 +244,9 @@ public sealed class AuthControllerTests
         _sut.Response.Headers.Should().ContainKey("Set-Cookie");
     }
 
+    /// <summary>
+    /// Verifies that logout without a cookie does not call the revoke service.
+    /// </summary>
     [Fact]
     public async Task Logout_WithoutCookie_DoesNotCallRevoke()
     {
@@ -213,6 +258,9 @@ public sealed class AuthControllerTests
 
     // ── External ───────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that a valid external login request returns 200 OK.
+    /// </summary>
     [Fact]
     public async Task External_WithValidRequest_ReturnsOk()
     {
@@ -228,6 +276,9 @@ public sealed class AuthControllerTests
         result.Result.Should().BeOfType<OkObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that an invalid provider returns 400 Bad Request.
+    /// </summary>
     [Fact]
     public async Task External_WithInvalidProvider_ReturnsBadRequest()
     {

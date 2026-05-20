@@ -7,11 +7,19 @@ using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Auth;
 
+/// <summary>
+/// Service for creating signed JWT access tokens using HMAC-SHA256.
+/// </summary>
 public sealed class JwtTokenService : IJwtTokenService
 {
     private readonly JwtOptions _options;
     private readonly ILogger<JwtTokenService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="JwtTokenService"/> class.
+    /// </summary>
+    /// <param name="options">JWT configuration options (secret, issuer, audience, expiry).</param>
+    /// <param name="logger">Logger instance.</param>
     public JwtTokenService(IOptions<JwtOptions> options, ILogger<JwtTokenService> logger)
     {
         _options = options.Value;

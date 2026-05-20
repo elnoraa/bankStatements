@@ -4,8 +4,14 @@ using Statements.WebAPI.Contracts.Auth;
 
 namespace Statements.WebAPI.Tests.Contracts;
 
+/// <summary>
+/// Unit tests for <see cref="RegisterRequest"/> validation attributes.
+/// </summary>
 public sealed class RegisterRequestValidationTests
 {
+    /// <summary>
+    /// Verifies that a valid registration request passes all validation rules.
+    /// </summary>
     [Fact]
     public void WithValidData_PassesValidation()
     {
@@ -19,6 +25,9 @@ public sealed class RegisterRequestValidationTests
         errors.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies that a missing email fails validation.
+    /// </summary>
     [Fact]
     public void WithMissingEmail_FailsValidation()
     {
@@ -32,6 +41,9 @@ public sealed class RegisterRequestValidationTests
         errors.Should().Contain(e => e.MemberNames.Contains("Email"));
     }
 
+    /// <summary>
+    /// Verifies that an invalid email format fails validation.
+    /// </summary>
     [Fact]
     public void WithInvalidEmailFormat_FailsValidation()
     {
@@ -45,6 +57,9 @@ public sealed class RegisterRequestValidationTests
         errors.Should().Contain(e => e.MemberNames.Contains("Email"));
     }
 
+    /// <summary>
+    /// Verifies that a password shorter than 8 characters fails validation.
+    /// </summary>
     [Fact]
     public void WithShortPassword_FailsValidation()
     {

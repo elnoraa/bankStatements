@@ -5,6 +5,9 @@ using Statements.WebAPI.Data;
 
 namespace Statements.WebAPI.Services.Statements;
 
+/// <summary>
+/// Handles bank statement file upload, virus scanning, deduplication, and parsing initiation.
+/// </summary>
 public sealed class StatementService : IStatementService
 {
     private readonly IDbExecutor _dbExecutor;
@@ -14,6 +17,15 @@ public sealed class StatementService : IStatementService
     private readonly IConfiguration _configuration;
     private readonly ILogger<StatementService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StatementService"/> class.
+    /// </summary>
+    /// <param name="dbExecutor">Executes Dapper database commands.</param>
+    /// <param name="statementParser">Parses bank statement PDFs.</param>
+    /// <param name="virusScanService">Service for virus scanning uploaded files.</param>
+    /// <param name="environment">Web hosting environment information.</param>
+    /// <param name="configuration">Application configuration.</param>
+    /// <param name="logger">Logger instance.</param>
     public StatementService(
         IDbExecutor dbExecutor,
         IStatementParser statementParser,
@@ -30,6 +42,7 @@ public sealed class StatementService : IStatementService
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async Task<StatementUploadResponse> UploadAsync(
         Guid userId,
         Guid? bankAccountId,

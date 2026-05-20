@@ -1,5 +1,13 @@
+-- =============================================================================
+-- Migration 001: Create core database tables
+-- =============================================================================
+-- This is the initial schema migration that creates all core tables for the
+-- bank statement management system.
+-- =============================================================================
+
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- Registered application users (both local auth and externally-linked accounts).
 CREATE TABLE app_users (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email VARCHAR(320) NOT NULL UNIQUE,
@@ -12,6 +20,7 @@ CREATE TABLE app_users (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Refresh tokens for JWT token rotation. Each user can have multiple active tokens.
 CREATE TABLE refresh_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -21,6 +30,7 @@ CREATE TABLE refresh_tokens (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Bank accounts associated with users for categorising statements.
 CREATE TABLE bank_accounts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -32,6 +42,7 @@ CREATE TABLE bank_accounts (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Uploaded bank statement files with metadata and processing status.
 CREATE TABLE bank_statements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
@@ -52,6 +63,7 @@ CREATE TABLE bank_statements (
     CHECK (scan_status IN ('pending', 'clean', 'infected', 'error'))
 );
 
+-- Predefined transaction categories for classifying spending and income.
 CREATE TABLE transaction_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name VARCHAR(80) NOT NULL UNIQUE,
@@ -59,6 +71,7 @@ CREATE TABLE transaction_categories (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Individual transactions parsed from uploaded bank statements.
 CREATE TABLE statement_transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     bank_statement_id UUID NOT NULL REFERENCES bank_statements(id) ON DELETE CASCADE,
@@ -74,6 +87,7 @@ CREATE TABLE statement_transactions (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Cached spending analysis results for quick retrieval.
 CREATE TABLE analysis_runs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,

@@ -8,6 +8,9 @@ using Statements.WebAPI.Data;
 
 namespace Statements.WebAPI.Services.Auth;
 
+/// <summary>
+/// Handles user authentication operations including registration, login, external auth, and token management.
+/// </summary>
 public sealed class AuthService : IAuthService
 {
     private readonly IDbExecutor _dbExecutor;
@@ -18,6 +21,16 @@ public sealed class AuthService : IAuthService
     private readonly IExternalAuthValidator _externalAuthValidator;
     private readonly ILogger<AuthService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuthService"/> class.
+    /// </summary>
+    /// <param name="dbExecutor">Executes Dapper database commands.</param>
+    /// <param name="connectionFactory">Factory for creating database connections (used for transactions).</param>
+    /// <param name="passwordHasher">Service for hashing and verifying passwords.</param>
+    /// <param name="jwtTokenService">Service for creating JWT access tokens.</param>
+    /// <param name="jwtOptions">JWT configuration options.</param>
+    /// <param name="externalAuthValidator">Validator for external OAuth/OpenID tokens.</param>
+    /// <param name="logger">Logger instance.</param>
     public AuthService(
         IDbExecutor dbExecutor,
         IDbConnectionFactory connectionFactory,
@@ -36,6 +49,7 @@ public sealed class AuthService : IAuthService
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponse> ExternalLoginAsync(ExternalLoginRequest request, CancellationToken cancellationToken)
     {
         _logger.LogInformation("External login attempt with provider: {Provider}", request.Provider);
@@ -162,6 +176,7 @@ public sealed class AuthService : IAuthService
         }
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
@@ -208,6 +223,7 @@ public sealed class AuthService : IAuthService
         return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
@@ -274,6 +290,7 @@ public sealed class AuthService : IAuthService
         return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Refresh token attempt");
@@ -322,6 +339,7 @@ public sealed class AuthService : IAuthService
         return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
+    /// <inheritdoc />
     public async Task RevokeTokenAsync(string refreshToken, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Revoke token attempt");
@@ -337,6 +355,13 @@ public sealed class AuthService : IAuthService
         _logger.LogDebug("Refresh token revoked");
     }
 
+    /// <summary>
+    /// Creates an <see cref="AuthResponse"/> with a JWT access token, refresh token, and user profile.
+    /// Also persists the refresh token to the database.
+    /// </summary>
+    /// <param name="user">The authenticated user.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>An <see cref="AuthResponse"/> containing tokens and user info.</returns>
     private async Task<AuthResponse> CreateAuthResponseAsync(
         AuthUser user,
         CancellationToken cancellationToken)
@@ -371,11 +396,20 @@ public sealed class AuthService : IAuthService
             new AuthUserResponse(user.Id, user.Email, user.DisplayName, user.EmailVerified));
     }
 
+    /// <summary>
+    /// Normalizes an email address by trimming whitespace and converting to lowercase.
+    /// </summary>
+    /// <param name="email">The email address to normalize.</param>
+    /// <returns>The normalized email string.</returns>
     private static string NormalizeEmail(string email)
     {
         return email.Trim().ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Generates a cryptographically random refresh token string (URL-safe base64, no padding).
+    /// </summary>
+    /// <returns>A URL-safe random token string.</returns>
     private static string GenerateRefreshToken()
     {
         var bytes = RandomNumberGenerator.GetBytes(64);
@@ -385,6 +419,11 @@ public sealed class AuthService : IAuthService
             .TrimEnd('=');
     }
 
+    /// <summary>
+    /// Computes the SHA-256 hash of a refresh token for secure database storage.
+    /// </summary>
+    /// <param name="refreshToken">The raw refresh token to hash.</param>
+    /// <returns>The lowercase hexadecimal SHA-256 hash.</returns>
     private static string HashRefreshToken(string refreshToken)
     {
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken));

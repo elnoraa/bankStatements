@@ -21,6 +21,10 @@ public class WeatherForecastController : ControllerBase
         "Scorching"
     ];
 
+    /// <summary>
+    /// Returns a 5-day weather forecast with random temperatures.
+    /// </summary>
+    /// <returns>An array of <see cref="WeatherForecast"/> objects.</returns>
     [HttpGet]
     public ActionResult<IEnumerable<WeatherForecast>> Get()
     {

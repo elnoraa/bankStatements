@@ -3,58 +3,96 @@ import './App.css';
 import { ExternalLoginButtons } from './components/ExternalLoginButtons';
 import { refreshAuthToken, logout as apiLogout } from './services/externalAuth';
 
+/** Authentication mode — either login or registration. */
 type AuthMode = 'login' | 'register';
 
+/** Authenticated user profile returned from the API. */
 type AuthUser = {
+  /** Unique user identifier. */
   id: string;
+  /** User's email address. */
   email: string;
+  /** User's display name. */
   displayName: string;
+  /** Whether the user's email has been verified. */
   emailVerified: boolean;
 };
 
+/** Auth response containing access token, expiry, and user info. */
 type AuthResponse = {
+  /** JWT access token for API authorization. */
   accessToken: string;
+  /** Date/time when the access token expires. */
   accessTokenExpiresAt: string;
+  /** Authenticated user profile. */
   user: AuthUser;
 };
 
+/** Response after uploading a bank statement. */
 type StatementUploadResponse = {
+  /** Unique statement identifier. */
   id: string;
+  /** Original file name as provided by the user. */
   originalFileName: string;
+  /** Unique file name used for server storage. */
   storedFileName: string;
+  /** Processing status (e.g., "uploaded", "processing", "completed"). */
   status: string;
+  /** ISO timestamp of when the statement was uploaded. */
   uploadedAt: string;
+  /** Number of transactions parsed from the statement. */
   parsedTransactionCount: number;
 };
 
+/** Spending aggregated by category. */
 type CategorySpending = {
+  /** The spending category name. */
   category: string;
+  /** Total debit amount in this category. */
   totalDebit: number;
+  /** Number of transactions in this category. */
   transactionCount: number;
 };
 
+/** A single recent transaction. */
 type RecentTransaction = {
+  /** Unique transaction identifier. */
   id: string;
+  /** ISO date of the transaction. */
   transactionDate: string;
+  /** Transaction description or merchant name. */
   description: string;
+  /** Transaction amount. */
   amount: number;
+  /** "credit" or "debit". */
   transactionType: 'credit' | 'debit';
+  /** Assigned spending category, if any. */
   category?: string | null;
 };
 
+/** Spending analysis summary for a period. */
 type SpendingSummary = {
+  /** Optional start date of the analysis period. */
   periodStart?: string | null;
+  /** Optional end date of the analysis period. */
   periodEnd?: string | null;
+  /** Total credit (income) amount. */
   totalCredit: number;
+  /** Total debit (expense) amount. */
   totalDebit: number;
+  /** Net cash flow (credit - debit). */
   netCashflow: number;
+  /** Whether net cash flow is positive. */
   isCashflowPositive: boolean;
+  /** Spending breakdown by category. */
   spendingByCategory: CategorySpending[];
+  /** Recent individual transactions. */
   recentTransactions: RecentTransaction[];
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5213';
 
+/** Main application component with auth flow, statement upload, and spending analysis. */
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [displayName, setDisplayName] = useState('');
@@ -105,6 +143,10 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
+  /**
+   * Handles authentication form submission (login or register).
+   * On success, stores the auth response and clears the password field.
+   */
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsAuthLoading(true);
@@ -138,7 +180,10 @@ function App() {
     }
   }
 
-  // Helper: make an authenticated API call with automatic token refresh on 401
+  /**
+   * Makes an authenticated API call, automatically retrying with a refreshed token on 401.
+   * If token refresh fails, clears auth state and throws.
+   */
   const authedFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const token = accessTokenRef.current;
     if (!token) {
@@ -177,6 +222,7 @@ function App() {
     return response;
   }, []);
 
+  /** Handles statement file upload form submission. */
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
@@ -210,6 +256,10 @@ function App() {
     }
   }
 
+  /**
+   * Loads the spending analysis summary from the API.
+   * @param accessToken - Optional explicit access token to use. Falls back to the ref-stored token.
+   */
   async function loadSummary(accessToken?: string) {
     const token = accessToken ?? accessTokenRef.current;
     if (!token) {
@@ -233,6 +283,7 @@ function App() {
     }
   }
 
+  /** Signs the user out: calls the logout API and clears all auth state. */
   async function signOut() {
     await apiLogout();
     setAuth(null);

@@ -8,16 +8,25 @@ using Statements.WebAPI.Services.Analysis;
 
 namespace Statements.WebAPI.Tests.Services.Analysis;
 
+/// <summary>
+/// Unit tests for <see cref="AnalysisService"/>.
+/// </summary>
 public sealed class AnalysisServiceTests
 {
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
     private readonly AnalysisService _sut;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnalysisServiceTests"/> class.
+    /// </summary>
     public AnalysisServiceTests()
     {
         _sut = new AnalysisService(_dbExecutorMock.Object, Mock.Of<ILogger<AnalysisService>>());
     }
 
+    /// <summary>
+    /// Verifies that a valid user with transactions returns a complete spending summary.
+    /// </summary>
     [Fact]
     public async Task GetSummaryAsync_WithValidUser_ReturnsSpendingSummary()
     {
@@ -67,6 +76,9 @@ public sealed class AnalysisServiceTests
         result.PeriodEnd.Should().Be(new DateOnly(2025, 12, 31));
     }
 
+    /// <summary>
+    /// Verifies that a user with no transactions returns zero totals.
+    /// </summary>
     [Fact]
     public async Task GetSummaryAsync_WithNoTransactions_ReturnsZeroTotals()
     {
@@ -102,6 +114,9 @@ public sealed class AnalysisServiceTests
         result.RecentTransactions.Should().BeEmpty();
     }
 
+    /// <summary>
+    /// Verifies that negative cash flow returns IsCashflowPositive as false.
+    /// </summary>
     [Fact]
     public async Task GetSummaryAsync_WithNegativeCashflow_ReturnsIsCashflowPositiveFalse()
     {
@@ -133,6 +148,9 @@ public sealed class AnalysisServiceTests
         result.IsCashflowPositive.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Verifies that the bank account filter is included in the query when specified.
+    /// </summary>
     [Fact]
     public async Task GetSummaryAsync_WithBankAccountFilter_IncludesFilterInQuery()
     {
@@ -162,6 +180,9 @@ public sealed class AnalysisServiceTests
         _dbExecutorMock.Verify(x => x.QuerySingleAsync<AnalysisService.CashflowTotals>(It.IsAny<CommandDefinition>()), Times.Once);
     }
 
+    /// <summary>
+    /// Verifies that the date range filter is included in the query when specified.
+    /// </summary>
     [Fact]
     public async Task GetSummaryAsync_WithDateRange_IncludesDateFilter()
     {

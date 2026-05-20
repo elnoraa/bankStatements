@@ -10,13 +10,30 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace Statements.WebAPI.Services.Auth;
 
+/// <summary>
+/// Configuration for an external OAuth/OpenID provider.
+/// </summary>
 internal sealed class ProviderConfig
 {
+    /// <summary>
+    /// The OAuth authority URL (e.g., https://accounts.google.com).
+    /// </summary>
     public string Authority { get; init; } = null!;
+
+    /// <summary>
+    /// The client ID registered with the provider.
+    /// </summary>
     public string? ClientId { get; init; }
+
+    /// <summary>
+    /// Optional audience override for token validation.
+    /// </summary>
     public string? Audience { get; init; }
 }
 
+/// <summary>
+/// Validates identity tokens from external OAuth/OpenID providers by fetching and using their JWKS endpoints.
+/// </summary>
 public sealed class ExternalAuthValidator : IExternalAuthValidator
 {
     private readonly IConfiguration _configuration;
@@ -24,6 +41,12 @@ public sealed class ExternalAuthValidator : IExternalAuthValidator
     private readonly ILogger<ExternalAuthValidator> _logger;
     private readonly ConcurrentDictionary<string, (DateTimeOffset Expiry, JsonWebKeySet Jwks, string Issuer)> _cache = new();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExternalAuthValidator"/> class.
+    /// </summary>
+    /// <param name="configuration">Application configuration containing provider settings.</param>
+    /// <param name="httpClientFactory">Factory for creating HTTP clients.</param>
+    /// <param name="logger">Logger instance.</param>
     public ExternalAuthValidator(IConfiguration configuration, IHttpClientFactory httpClientFactory, ILogger<ExternalAuthValidator> logger)
     {
         _configuration = configuration;
@@ -31,6 +54,7 @@ public sealed class ExternalAuthValidator : IExternalAuthValidator
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async Task<ExternalUserInfo> ValidateAsync(string provider, string idToken, CancellationToken cancellationToken)
     {
         _logger.LogInformation("Validating external token for provider: {Provider}", provider);

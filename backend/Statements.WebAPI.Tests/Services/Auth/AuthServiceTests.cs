@@ -10,6 +10,9 @@ using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Tests.Services.Auth;
 
+/// <summary>
+/// Unit tests for <see cref="AuthService"/>.
+/// </summary>
 public sealed class AuthServiceTests
 {
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
@@ -28,6 +31,10 @@ public sealed class AuthServiceTests
     private readonly AuthService _sut;
     private readonly JwtAccessToken _testAccessToken;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuthServiceTests"/> class.
+    /// Sets up mocks and the system under test.
+    /// </summary>
     public AuthServiceTests()
     {
         _testAccessToken = new JwtAccessToken("test-token", DateTimeOffset.UtcNow.AddMinutes(15));
@@ -47,6 +54,9 @@ public sealed class AuthServiceTests
 
     // ── RegisterAsync ──────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that registering a new email returns an <see cref="AuthResponse"/> with a token.
+    /// </summary>
     [Fact]
     public async Task RegisterAsync_WithNewEmail_ReturnsAuthResponse()
     {
@@ -86,6 +96,9 @@ public sealed class AuthServiceTests
         result.User.DisplayName.Should().Be("New User");
     }
 
+    /// <summary>
+    /// Verifies that registering an existing email throws <see cref="AuthConflictException"/>.
+    /// </summary>
     [Fact]
     public async Task RegisterAsync_WithExistingEmail_ThrowsAuthConflictException()
     {
@@ -138,6 +151,9 @@ public sealed class AuthServiceTests
 
     // ── LoginAsync ─────────────────────────────────────────────
 
+    /// <summary>
+    /// Verifies that valid login credentials return an <see cref="AuthResponse"/>.
+    /// </summary>
     [Fact]
     public async Task LoginAsync_WithValidCredentials_ReturnsAuthResponse()
     {
@@ -178,6 +194,9 @@ public sealed class AuthServiceTests
         result.User.Id.Should().Be(userId);
     }
 
+    /// <summary>
+    /// Verifies that an invalid password throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
     [Fact]
     public async Task LoginAsync_WithInvalidPassword_ThrowsAuthInvalidCredentialsException()
     {
@@ -211,6 +230,9 @@ public sealed class AuthServiceTests
         await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
     }
 
+    /// <summary>
+    /// Verifies that a non-existent email throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
     [Fact]
     public async Task LoginAsync_WithNonexistentEmail_ThrowsAuthInvalidCredentialsException()
     {
@@ -225,6 +247,9 @@ public sealed class AuthServiceTests
         await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
     }
 
+    /// <summary>
+    /// Verifies that a locked account throws <see cref="AuthAccountLockedException"/>.
+    /// </summary>
     [Fact]
     public async Task LoginAsync_WithLockedAccount_ThrowsAuthAccountLockedException()
     {
@@ -252,6 +277,9 @@ public sealed class AuthServiceTests
         _passwordHasherMock.Verify(x => x.Verify(It.IsAny<string>(), It.IsAny<string>()), Times.Never);
     }
 
+    /// <summary>
+    /// Verifies that a successful login resets the failed login attempts counter.
+    /// </summary>
     [Fact]
     public async Task LoginAsync_OnSuccess_ResetsFailedLoginAttempts()
     {
@@ -290,8 +318,9 @@ public sealed class AuthServiceTests
     }
 
     // ── RefreshTokenAsync ──────────────────────────────────────
-
-    [Fact]
+    /// <summary>
+    /// Verifies that a valid refresh token returns a new <see cref="AuthResponse"/>.
+    /// </summary>    [Fact]
     public async Task RefreshTokenAsync_WithValidToken_ReturnsAuthResponse()
     {
         var userId = Guid.NewGuid();
@@ -322,6 +351,9 @@ public sealed class AuthServiceTests
         result.User.Id.Should().Be(userId);
     }
 
+    /// <summary>
+    /// Verifies that an expired refresh token throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
     [Fact]
     public async Task RefreshTokenAsync_WithExpiredToken_ThrowsAuthInvalidCredentialsException()
     {
@@ -336,6 +368,9 @@ public sealed class AuthServiceTests
         await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
     }
 
+    /// <summary>
+    /// Verifies that a revoked refresh token throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
     [Fact]
     public async Task RefreshTokenAsync_WithRevokedToken_ThrowsAuthInvalidCredentialsException()
     {
@@ -350,6 +385,9 @@ public sealed class AuthServiceTests
         await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
     }
 
+    /// <summary>
+    /// Verifies that a non-existent refresh token throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
     [Fact]
     public async Task RefreshTokenAsync_WithNonexistentToken_ThrowsAuthInvalidCredentialsException()
     {
@@ -363,8 +401,9 @@ public sealed class AuthServiceTests
     }
 
     // ── RevokeTokenAsync ───────────────────────────────────────
-
-    [Fact]
+    /// <summary>
+    /// Verifies that revoking a valid token executes the database update.
+    /// </summary>    [Fact]
     public async Task RevokeTokenAsync_WithValidToken_UpdatesDatabase()
     {
         _dbExecutorMock
@@ -377,8 +416,9 @@ public sealed class AuthServiceTests
     }
 
     // ── ExternalLoginAsync ─────────────────────────────────────
-
-    [Fact]
+    /// <summary>
+    /// Verifies that an existing external login mapping returns an <see cref="AuthResponse"/>.
+    /// </summary>    [Fact]
     public async Task ExternalLoginAsync_WithExistingExternalLogin_ReturnsAuthResponse()
     {
         var userId = Guid.NewGuid();
@@ -414,6 +454,9 @@ public sealed class AuthServiceTests
         result.User.Id.Should().Be(userId);
     }
 
+    /// <summary>
+    /// Verifies that an external login with an existing email but no mapping links the external account.
+    /// </summary>
     [Fact]
     public async Task ExternalLoginAsync_WithExistingEmailButNoMapping_LinksAccount()
     {
@@ -452,6 +495,9 @@ public sealed class AuthServiceTests
         result.User.Id.Should().Be(userId);
     }
 
+    /// <summary>
+    /// Verifies that when external auth validation fails, the exception is propagated to the caller.
+    /// </summary>
     [Fact]
     public async Task ExternalLoginAsync_WhenValidationFails_PropagatesException()
     {

@@ -10,6 +10,9 @@ using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Services.Statements;
 
+/// <summary>
+/// Unit tests for <see cref="StatementService"/>.
+/// </summary>
 public sealed class StatementServiceTests
 {
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
@@ -20,6 +23,10 @@ public sealed class StatementServiceTests
     private readonly StatementService _sut;
     private readonly Guid _userId = Guid.NewGuid();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StatementServiceTests"/> class.
+    /// Sets up in-memory configuration and mocks.
+    /// </summary>
     public StatementServiceTests()
     {
         _configuration = new ConfigurationBuilder()
@@ -40,6 +47,12 @@ public sealed class StatementServiceTests
             Mock.Of<ILogger<StatementService>>());
     }
 
+    /// <summary>
+    /// Creates a mock PDF form file for testing.
+    /// </summary>
+    /// <param name="fileName">The file name (default: "statement.pdf").</param>
+    /// <param name="size">The file size in bytes (default: 1024).</param>
+    /// <returns>A configured mock <see cref="IFormFile"/>.</returns>
     private static Mock<IFormFile> CreateMockPdfFile(string fileName = "statement.pdf", long size = 1024)
     {
         var fileMock = new Mock<IFormFile>();
@@ -57,6 +70,9 @@ public sealed class StatementServiceTests
         return fileMock;
     }
 
+    /// <summary>
+    /// Verifies that uploading a non-PDF file throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithNonPdfFile_ThrowsInvalidOperationException()
     {
@@ -68,6 +84,9 @@ public sealed class StatementServiceTests
             .WithMessage("Only PDF bank statements are supported.");
     }
 
+    /// <summary>
+    /// Verifies that uploading with an invalid bank account ID throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithInvalidBankAccount_ThrowsInvalidOperationException()
     {
@@ -84,6 +103,9 @@ public sealed class StatementServiceTests
             .WithMessage("The selected bank account does not exist for this user.");
     }
 
+    /// <summary>
+    /// Verifies that uploading a file detected as infected throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithVirusDetected_ThrowsInvalidOperationException()
     {
@@ -104,6 +126,9 @@ public sealed class StatementServiceTests
             .WithMessage("*virus*");
     }
 
+    /// <summary>
+    /// Verifies that a virus scan error throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithVirusScanError_ThrowsInvalidOperationException()
     {
@@ -119,6 +144,9 @@ public sealed class StatementServiceTests
             .WithMessage("*could not be verified as safe*");
     }
 
+    /// <summary>
+    /// Verifies that a clean file upload saves the file, parses it, and returns a <see cref="StatementUploadResponse"/>.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithCleanFileAndNewStatement_SavesAndReturnsResponse()
     {
@@ -186,6 +214,9 @@ public sealed class StatementServiceTests
         result.Id.Should().Be(statementId);
     }
 
+    /// <summary>
+    /// Verifies that uploading a file with a duplicate hash returns the existing statement without re-processing.
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WithDuplicateHash_ReturnsExistingStatement()
     {
@@ -209,6 +240,9 @@ public sealed class StatementServiceTests
         _statementParserMock.Verify(x => x.Parse(It.IsAny<string>()), Times.Never);
     }
 
+    /// <summary>
+    /// Verifies that when the parser throws, the statement status is set to "failed".
+    /// </summary>
     [Fact]
     public async Task UploadAsync_WhenParserThrows_SetsStatusToFailed()
     {

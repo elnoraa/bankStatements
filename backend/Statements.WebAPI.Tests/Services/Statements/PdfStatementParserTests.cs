@@ -5,16 +5,25 @@ using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Services.Statements;
 
+/// <summary>
+/// Unit tests for <see cref="PdfStatementParser"/>.
+/// </summary>
 public sealed class PdfStatementParserTests
 {
     private readonly PdfStatementParser _sut;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PdfStatementParserTests"/> class.
+    /// </summary>
     public PdfStatementParserTests()
     {
         var logger = Mock.Of<ILogger<PdfStatementParser>>();
         _sut = new PdfStatementParser(logger);
     }
 
+    /// <summary>
+    /// Verifies that parsing a non-PDF file extension throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public void Parse_WithNonPdfExtension_ThrowsInvalidOperationException()
     {
@@ -23,6 +32,9 @@ public sealed class PdfStatementParserTests
         act.Should().Throw<InvalidOperationException>().WithMessage("Only PDF bank statements are supported.");
     }
 
+    /// <summary>
+    /// Verifies that parsing a non-existent PDF file throws an exception.
+    /// </summary>
     [Fact]
     public void Parse_WithNonExistentPdfFile_Throws()
     {
@@ -31,6 +43,9 @@ public sealed class PdfStatementParserTests
         act.Should().Throw<Exception>();
     }
 
+    /// <summary>
+    /// Verifies that a DD/MM/YYYY date format is parsed correctly.
+    /// </summary>
     [Fact]
     public void TryParseDate_WithDDMMYYYY_Succeeds()
     {
@@ -40,6 +55,9 @@ public sealed class PdfStatementParserTests
         date.Should().Be(new DateOnly(2025, 1, 15));
     }
 
+    /// <summary>
+    /// Verifies that a D/Month/YYYY date format is parsed correctly.
+    /// </summary>
     [Fact]
     public void TryParseDate_WithDMonthYYYY_Succeeds()
     {
@@ -49,6 +67,9 @@ public sealed class PdfStatementParserTests
         date.Should().Be(new DateOnly(2025, 1, 5));
     }
 
+    /// <summary>
+    /// Verifies that a YYYY-MM-DD date format is parsed correctly.
+    /// </summary>
     [Fact]
     public void TryParseDate_WithYYYYMMDD_Succeeds()
     {
@@ -58,6 +79,9 @@ public sealed class PdfStatementParserTests
         date.Should().Be(new DateOnly(2025, 1, 15));
     }
 
+    /// <summary>
+    /// Verifies that an invalid date string returns false.
+    /// </summary>
     [Fact]
     public void TryParseDate_WithInvalidString_ReturnsFalse()
     {
@@ -66,6 +90,9 @@ public sealed class PdfStatementParserTests
         result.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Verifies that various money formats (including negative in parentheses) are parsed correctly.
+    /// </summary>
     [Theory]
     [InlineData("$1,234.56", 1234.56)]
     [InlineData("$0.99", 0.99)]
@@ -82,6 +109,9 @@ public sealed class PdfStatementParserTests
         amount.Should().Be(expected);
     }
 
+    /// <summary>
+    /// Verifies that a non-monetary string returns false when parsing money.
+    /// </summary>
     [Fact]
     public void TryParseMoney_WithInvalidString_ReturnsFalse()
     {
@@ -90,6 +120,9 @@ public sealed class PdfStatementParserTests
         result.Should().BeFalse();
     }
 
+    /// <summary>
+    /// Verifies that a line with date and amount produces a <see cref="ParsedStatementTransaction"/>.
+    /// </summary>
     [Theory]
     [InlineData("15/01/2025 WITHDRAWAL $100.00", 100.00, "debit")]
     [InlineData("15/01/2025 SALARY $2000.00", 2000.00, "credit")]
@@ -103,6 +136,9 @@ public sealed class PdfStatementParserTests
         result.TransactionType.Should().Be(expectedType);
     }
 
+    /// <summary>
+    /// Verifies that a line without a date returns null.
+    /// </summary>
     [Fact]
     public void TryParseLine_WithNoDate_ReturnsNull()
     {
@@ -111,6 +147,9 @@ public sealed class PdfStatementParserTests
         result.Should().BeNull();
     }
 
+    /// <summary>
+    /// Verifies that a line without an amount returns null.
+    /// </summary>
     [Fact]
     public void TryParseLine_WithNoAmount_ReturnsNull()
     {
@@ -119,6 +158,9 @@ public sealed class PdfStatementParserTests
         result.Should().BeNull();
     }
 
+    /// <summary>
+    /// Verifies that negative amounts in parentheses are parsed as negative values.
+    /// </summary>
     [Fact]
     public void TryParseLine_WithNegativeAmountInParentheses_ReturnsNegativeAmount()
     {
@@ -129,6 +171,9 @@ public sealed class PdfStatementParserTests
         result.TransactionType.Should().Be("debit");
     }
 
+    /// <summary>
+    /// Verifies that a line with amount and balance sets the BalanceAfter property.
+    /// </summary>
     [Fact]
     public void TryParseLine_WithAmountAndBalance_ReturnsParsedTransactionWithBalanceAfter()
     {
@@ -139,6 +184,9 @@ public sealed class PdfStatementParserTests
         result.BalanceAfter.Should().Be(1000.00m);
     }
 
+    /// <summary>
+    /// Verifies that descriptions with credit keywords are classified as "credit".
+    /// </summary>
     [Theory]
     [InlineData("salary", "credit")]
     [InlineData("payroll", "credit")]
@@ -154,6 +202,9 @@ public sealed class PdfStatementParserTests
         result.Should().Be(expected);
     }
 
+    /// <summary>
+    /// Verifies that debit transaction descriptions map to the correct spending categories.
+    /// </summary>
     [Theory]
     [InlineData("coles", "Groceries")]
     [InlineData("WOOLWORTHS", "Groceries")]
@@ -182,6 +233,9 @@ public sealed class PdfStatementParserTests
         result.Should().Be(expected);
     }
 
+    /// <summary>
+    /// Verifies that credit transaction descriptions map to the correct income categories.
+    /// </summary>
     [Theory]
     [InlineData("salary deposit", "Salary")]
     [InlineData("payroll credit", "Salary")]
@@ -197,6 +251,9 @@ public sealed class PdfStatementParserTests
         result.Should().Be(expected);
     }
 
+    /// <summary>
+    /// Verifies that the description is correctly extracted from the transaction line.
+    /// </summary>
     [Fact]
     public void TryParseLine_WithDateAndAmount_ExtractsDescription()
     {

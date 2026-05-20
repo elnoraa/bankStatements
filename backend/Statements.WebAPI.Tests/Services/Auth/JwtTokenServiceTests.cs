@@ -9,6 +9,9 @@ using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Tests.Services.Auth;
 
+/// <summary>
+/// Unit tests for <see cref="JwtTokenService"/>.
+/// </summary>
 public sealed class JwtTokenServiceTests
 {
     private static readonly JwtOptions ValidOptions = new()
@@ -29,6 +32,9 @@ public sealed class JwtTokenServiceTests
         PasswordHash = "somehash"
     };
 
+    /// <summary>
+    /// Verifies that a valid user produces a JWT with the correct claims (sub, email, name, jti).
+    /// </summary>
     [Fact]
     public void CreateAccessToken_WithValidUser_ReturnsTokenWithCorrectClaims()
     {
@@ -50,6 +56,9 @@ public sealed class JwtTokenServiceTests
         token.Audiences.Should().Contain(ValidOptions.Audience);
     }
 
+    /// <summary>
+    /// Verifies that the token expiration matches the configured AccessTokenMinutes.
+    /// </summary>
     [Fact]
     public void CreateAccessToken_WithValidUser_ReturnsTokenWithCorrectExpiry()
     {
@@ -60,6 +69,9 @@ public sealed class JwtTokenServiceTests
         result.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(ValidOptions.AccessTokenMinutes), TimeSpan.FromSeconds(5));
     }
 
+    /// <summary>
+    /// Verifies that an empty JWT secret throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public void CreateAccessToken_WithEmptySecret_ThrowsInvalidOperationException()
     {
@@ -78,6 +90,9 @@ public sealed class JwtTokenServiceTests
         act.Should().Throw<InvalidOperationException>().WithMessage("JWT secret is not configured.");
     }
 
+    /// <summary>
+    /// Verifies that a whitespace-only JWT secret throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public void CreateAccessToken_WithWhitespaceSecret_ThrowsInvalidOperationException()
     {
@@ -96,6 +111,11 @@ public sealed class JwtTokenServiceTests
         act.Should().Throw<InvalidOperationException>().WithMessage("JWT secret is not configured.");
     }
 
+    /// <summary>
+    /// Creates a <see cref="JwtTokenService"/> instance with the specified options for testing.
+    /// </summary>
+    /// <param name="options">The JWT options to use.</param>
+    /// <returns>A new <see cref="JwtTokenService"/> instance.</returns>
     private static JwtTokenService CreateSut(JwtOptions options)
     {
         var logger = Mock.Of<ILogger<JwtTokenService>>();

@@ -6,8 +6,14 @@ using Statements.WebAPI.Controllers;
 
 namespace Statements.WebAPI.Tests.Controllers;
 
+/// <summary>
+/// Unit tests for the <see cref="HealthController"/>.
+/// </summary>
 public sealed class HealthControllerTests
 {
+    /// <summary>
+    /// Verifies that the health endpoint returns 200 OK with status "ok" and a timestamp.
+    /// </summary>
     [Fact]
     public void Get_ReturnsOkWithStatusAndTimestamp()
     {

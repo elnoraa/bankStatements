@@ -15,12 +15,28 @@ public sealed class AnalysisController : ControllerBase
     private readonly IAnalysisService _analysisService;
     private readonly ILogger<AnalysisController> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnalysisController"/> class.
+    /// </summary>
+    /// <param name="analysisService">Service for spending analysis operations.</param>
+    /// <param name="logger">Logger instance.</param>
     public AnalysisController(IAnalysisService analysisService, ILogger<AnalysisController> logger)
     {
         _analysisService = analysisService;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Gets a spending summary with category breakdown and recent transactions.
+    /// </summary>
+    /// <param name="bankAccountId">Optional bank account ID to filter by.</param>
+    /// <param name="from">Optional start date for the analysis period.</param>
+    /// <param name="to">Optional end date for the analysis period.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="SpendingSummaryResponse"/> with aggregated spending data.</returns>
+    /// <response code="200">Summary retrieved successfully.</response>
+    /// <response code="400">Invalid date range (from &gt; to).</response>
+    /// <response code="401">User not authenticated.</response>
     [HttpGet("summary")]
     public async Task<ActionResult<SpendingSummaryResponse>> GetSummary(
         [FromQuery] Guid? bankAccountId,
@@ -59,6 +75,10 @@ public sealed class AnalysisController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>
+    /// Extracts the current user's ID from the JWT claims in the authorization header.
+    /// </summary>
+    /// <returns>The user's <see cref="Guid"/> if found and valid; otherwise <c>null</c>.</returns>
     private Guid? GetCurrentUserId()
     {
         var subject = User.FindFirstValue(JwtRegisteredClaimNames.Sub)

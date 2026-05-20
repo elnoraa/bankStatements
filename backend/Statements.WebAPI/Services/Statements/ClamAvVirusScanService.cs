@@ -45,6 +45,7 @@ public sealed class ClamAvVirusScanService : IVirusScanService, IDisposable
             options.Host, options.Port, _scanTimeoutSeconds);
     }
 
+    /// <inheritdoc />
     public async Task<VirusScanResult> ScanAsync(string filePath, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Starting virus scan: {FilePath}", filePath);
@@ -121,6 +122,9 @@ public sealed class ClamAvVirusScanService : IVirusScanService, IDisposable
         }
     }
 
+    /// <summary>
+    /// Disposes the underlying <see cref="ClamClient"/> instance.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

@@ -1,3 +1,4 @@
+-- Seed predefined transaction categories for demo and development.
 INSERT INTO transaction_categories (name, transaction_type) VALUES
     ('Salary', 'credit'),
     ('Refunds', 'credit'),
@@ -17,6 +18,7 @@ INSERT INTO transaction_categories (name, transaction_type) VALUES
     ('Uncategorised', 'both')
 ON CONFLICT (name) DO NOTHING;
 
+-- Seed a demo user account for development/testing.
 INSERT INTO app_users (id, email, display_name, password_hash, email_verified) VALUES
     (
         '11111111-1111-1111-1111-111111111111',
@@ -27,10 +29,12 @@ INSERT INTO app_users (id, email, display_name, password_hash, email_verified) V
     )
 ON CONFLICT (email) DO NOTHING;
 
+-- Seed a demo bank account linked to the demo user.
 INSERT INTO bank_accounts (id, user_id, bank_name, account_name, account_mask, currency) VALUES
     ('22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'Demo Bank', 'Everyday Account', '1234', 'AUD')
 ON CONFLICT (id) DO NOTHING;
 
+-- Seed a demo bank statement with sample transactions.
 INSERT INTO bank_statements (
     id,
     user_id,

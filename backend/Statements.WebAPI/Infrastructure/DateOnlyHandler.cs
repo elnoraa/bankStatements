@@ -9,8 +9,10 @@ namespace Statements.WebAPI.Infrastructure;
 /// </summary>
 internal sealed class DateOnlyHandler : SqlMapper.TypeHandler<DateOnly>
 {
+    /// <inheritdoc />
     public override DateOnly Parse(object value) => DateOnly.FromDateTime((DateTime)value);
 
+    /// <inheritdoc />
     public override void SetValue(IDbDataParameter parameter, DateOnly value)
     {
         parameter.DbType = DbType.Date;
@@ -23,6 +25,7 @@ internal sealed class DateOnlyHandler : SqlMapper.TypeHandler<DateOnly>
 /// </summary>
 internal sealed class NullableDateOnlyHandler : SqlMapper.TypeHandler<DateOnly?>
 {
+    /// <inheritdoc />
     public override DateOnly? Parse(object value)
     {
         if (value is null || value == DBNull.Value)
@@ -30,6 +33,7 @@ internal sealed class NullableDateOnlyHandler : SqlMapper.TypeHandler<DateOnly?>
         return DateOnly.FromDateTime((DateTime)value);
     }
 
+    /// <inheritdoc />
     public override void SetValue(IDbDataParameter parameter, DateOnly? value)
     {
         if (value.HasValue)

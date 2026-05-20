@@ -11,12 +11,18 @@ using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Controllers;
 
+/// <summary>
+/// Unit tests for the <see cref="StatementsController"/>.
+/// </summary>
 public sealed class StatementsControllerTests
 {
     private readonly Mock<IStatementService> _statementServiceMock = new();
     private readonly StatementsController _sut;
     private readonly Guid _userId = Guid.NewGuid();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="StatementsControllerTests"/> class.
+    /// </summary>
     public StatementsControllerTests()
     {
         _sut = new StatementsController(
@@ -24,6 +30,9 @@ public sealed class StatementsControllerTests
             Mock.Of<ILogger<StatementsController>>());
     }
 
+    /// <summary>
+    /// Sets up the controller context with a valid user identity.
+    /// </summary>
     private void SetupUserIdentity()
     {
         var claims = new[] { new Claim(JwtRegisteredClaimNames.Sub, _userId.ToString()) };
@@ -37,6 +46,9 @@ public sealed class StatementsControllerTests
         };
     }
 
+    /// <summary>
+    /// Sets up the controller context with no user identity (unauthenticated).
+    /// </summary>
     private void SetupNoUserIdentity()
     {
         _sut.ControllerContext = new ControllerContext
@@ -45,6 +57,10 @@ public sealed class StatementsControllerTests
         };
     }
 
+    /// <summary>
+    /// Creates a mock PDF form file for testing.
+    /// </summary>
+    /// <returns>A configured mock <see cref="IFormFile"/>.</returns>
     private static Mock<IFormFile> CreateMockPdfFile()
     {
         var fileMock = new Mock<IFormFile>();
@@ -54,6 +70,9 @@ public sealed class StatementsControllerTests
         return fileMock;
     }
 
+    /// <summary>
+    /// Verifies that uploading with no file returns 400 Bad Request.
+    /// </summary>
     [Fact]
     public async Task Upload_WithNoFile_ReturnsBadRequest()
     {
@@ -64,6 +83,9 @@ public sealed class StatementsControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that uploading with a null file returns 400 Bad Request.
+    /// </summary>
     [Fact]
     public async Task Upload_WithNullFile_ReturnsBadRequest()
     {
@@ -74,6 +96,9 @@ public sealed class StatementsControllerTests
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that uploading with an invalid user ID in the token returns 401 Unauthorized.
+    /// </summary>
     [Fact]
     public async Task Upload_WithInvalidUserIdInToken_ReturnsUnauthorized()
     {
@@ -84,6 +109,9 @@ public sealed class StatementsControllerTests
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that a valid file upload returns 201 Created with a statement upload response.
+    /// </summary>
     [Fact]
     public async Task Upload_WithValidFile_ReturnsCreated()
     {
@@ -114,6 +142,9 @@ public sealed class StatementsControllerTests
         createdResult.StatusCode.Should().Be(201);
     }
 
+    /// <summary>
+    /// Verifies that when the service throws an <see cref="InvalidOperationException"/>, the controller returns 400 Bad Request.
+    /// </summary>
     [Fact]
     public async Task Upload_WhenServiceThrowsInvalidOperation_ReturnsBadRequest()
     {

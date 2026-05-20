@@ -4,17 +4,26 @@ using Statements.WebAPI.Data;
 
 namespace Statements.WebAPI.Services.Analysis;
 
+/// <summary>
+/// Provides spending analysis by querying statement transactions and aggregating results.
+/// </summary>
 public sealed class AnalysisService : IAnalysisService
 {
     private readonly IDbExecutor _dbExecutor;
     private readonly ILogger<AnalysisService> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnalysisService"/> class.
+    /// </summary>
+    /// <param name="dbExecutor">Executes Dapper database commands.</param>
+    /// <param name="logger">Logger instance.</param>
     public AnalysisService(IDbExecutor dbExecutor, ILogger<AnalysisService> logger)
     {
         _dbExecutor = dbExecutor;
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public async Task<SpendingSummaryResponse> GetSummaryAsync(
         Guid userId,
         Guid? bankAccountId,

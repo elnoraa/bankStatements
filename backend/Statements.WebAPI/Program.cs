@@ -204,6 +204,13 @@ app.MapControllers();
 
 app.Run();
 
+/// <summary>
+/// Validates that required configuration values (JWT secret, connection string) are present and meet minimum requirements.
+/// Throws at startup if critical configuration is missing.
+/// </summary>
+/// <param name="configuration">The application configuration.</param>
+/// <param name="logger">Logger instance.</param>
+/// <exception cref="InvalidOperationException">Thrown when required configuration is missing.</exception>
 static void ValidateConfiguration(IConfiguration configuration, Microsoft.Extensions.Logging.ILogger logger)
 {
     var requiredVars = new (string Key, string Name)[]

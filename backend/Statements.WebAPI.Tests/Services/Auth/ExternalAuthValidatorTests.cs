@@ -12,6 +12,9 @@ using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Tests.Services.Auth;
 
+/// <summary>
+/// Unit tests for <see cref="ExternalAuthValidator"/>.
+/// </summary>
 public sealed class ExternalAuthValidatorTests
 {
     private readonly Mock<HttpMessageHandler> _httpMessageHandlerMock = new(MockBehavior.Strict);
@@ -19,6 +22,10 @@ public sealed class ExternalAuthValidatorTests
     private readonly ILogger<ExternalAuthValidator> _logger;
     private readonly HttpClient _httpClient;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExternalAuthValidatorTests"/> class.
+    /// Sets up in-memory configuration for the test provider.
+    /// </summary>
     public ExternalAuthValidatorTests()
     {
         var configData = new Dictionary<string, string?>
@@ -34,6 +41,9 @@ public sealed class ExternalAuthValidatorTests
         _httpClient = new HttpClient(_httpMessageHandlerMock.Object);
     }
 
+    /// <summary>
+    /// Verifies that a missing provider configuration throws <see cref="InvalidOperationException"/>.
+    /// </summary>
     [Fact]
     public async Task ValidateAsync_WithMissingProviderConfig_ThrowsInvalidOperationException()
     {
@@ -46,6 +56,9 @@ public sealed class ExternalAuthValidatorTests
             .WithMessage("Provider configuration not found: NonExistentProvider");
     }
 
+    /// <summary>
+    /// Verifies that an invalid token throws an exception during validation.
+    /// </summary>
     [Fact]
     public async Task ValidateAsync_WithInvalidToken_ThrowsInvalidOperationException()
     {
@@ -62,6 +75,9 @@ public sealed class ExternalAuthValidatorTests
         await act.Should().ThrowAsync<Exception>();
     }
 
+    /// <summary>
+    /// Verifies that a valid token returns <see cref="ExternalUserInfo"/> with correct claims.
+    /// </summary>
     [Fact]
     public async Task ValidateAsync_WithValidToken_ReturnsExternalUserInfo()
     {

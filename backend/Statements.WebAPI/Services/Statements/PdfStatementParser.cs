@@ -4,15 +4,23 @@ using UglyToad.PdfPig;
 
 namespace Statements.WebAPI.Services.Statements;
 
+/// <summary>
+/// Parses PDF bank statement files to extract structured transaction data using the PdfPig library.
+/// </summary>
 public sealed partial class PdfStatementParser : IStatementParser
 {
     private readonly ILogger<PdfStatementParser> _logger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PdfStatementParser"/> class.
+    /// </summary>
+    /// <param name="logger">Logger instance.</param>
     public PdfStatementParser(ILogger<PdfStatementParser> logger)
     {
         _logger = logger;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<ParsedStatementTransaction> Parse(string filePath)
     {
         _logger.LogInformation("Parsing PDF statement: {FilePath}", filePath);
@@ -51,6 +59,11 @@ public sealed partial class PdfStatementParser : IStatementParser
         return transactions;
     }
 
+    /// <summary>
+    /// Attempts to parse a single transaction line from the PDF text content.
+    /// </summary>
+    /// <param name="line">A line of text extracted from the PDF.</param>
+    /// <returns>A <see cref="ParsedStatementTransaction"/> if the line matches the expected format; otherwise <c>null</c>.</returns>
     internal static ParsedStatementTransaction? TryParseLine(string line)
     {
         var dateMatch = DateAtStartRegex().Match(line);

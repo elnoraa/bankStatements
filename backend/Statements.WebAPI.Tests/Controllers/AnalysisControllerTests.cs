@@ -11,12 +11,18 @@ using Statements.WebAPI.Services.Analysis;
 
 namespace Statements.WebAPI.Tests.Controllers;
 
+/// <summary>
+/// Unit tests for the <see cref="AnalysisController"/>.
+/// </summary>
 public sealed class AnalysisControllerTests
 {
     private readonly Mock<IAnalysisService> _analysisServiceMock = new();
     private readonly AnalysisController _sut;
     private readonly Guid _userId = Guid.NewGuid();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnalysisControllerTests"/> class.
+    /// </summary>
     public AnalysisControllerTests()
     {
         _sut = new AnalysisController(
@@ -24,6 +30,9 @@ public sealed class AnalysisControllerTests
             Mock.Of<ILogger<AnalysisController>>());
     }
 
+    /// <summary>
+    /// Sets up the controller context with a valid user identity.
+    /// </summary>
     private void SetupUserIdentity()
     {
         var claims = new[] { new Claim(JwtRegisteredClaimNames.Sub, _userId.ToString()) };
@@ -37,6 +46,9 @@ public sealed class AnalysisControllerTests
         };
     }
 
+    /// <summary>
+    /// Sets up the controller context with no user identity (unauthenticated).
+    /// </summary>
     private void SetupNoUserIdentity()
     {
         _sut.ControllerContext = new ControllerContext
@@ -45,6 +57,9 @@ public sealed class AnalysisControllerTests
         };
     }
 
+    /// <summary>
+    /// Verifies that a valid user gets a 200 OK response with a spending summary.
+    /// </summary>
     [Fact]
     public async Task GetSummary_WithValidUser_ReturnsOk()
     {
@@ -64,6 +79,9 @@ public sealed class AnalysisControllerTests
         result.Result.Should().BeOfType<OkObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that an invalid or missing user ID in the token returns 401 Unauthorized.
+    /// </summary>
     [Fact]
     public async Task GetSummary_WithInvalidUserIdInToken_ReturnsUnauthorized()
     {
@@ -74,6 +92,9 @@ public sealed class AnalysisControllerTests
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 
+    /// <summary>
+    /// Verifies that requesting a summary with from &gt; to returns 400 Bad Request.
+    /// </summary>
     [Fact]
     public async Task GetSummary_WithInvalidDateRange_ReturnsBadRequest()
     {
@@ -89,6 +110,9 @@ public sealed class AnalysisControllerTests
             Times.Never);
     }
 
+    /// <summary>
+    /// Verifies that valid filter parameters (bank account, date range) return 200 OK.
+    /// </summary>
     [Fact]
     public async Task GetSummary_WithValidFilters_ReturnsOk()
     {
