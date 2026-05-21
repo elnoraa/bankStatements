@@ -29,7 +29,7 @@ export interface AuthResponse {
  * @returns The auth response with tokens and user info.
  */
 export async function postExternalLogin(provider: string, idToken: string) {
-  const resp = await axios.post<AuthResponse>('/api/auth/external',
+  const resp = await axios.post<AuthResponse>('/api/v1/auth/external',
     { provider, idToken },
     { withCredentials: true }
   );
@@ -45,7 +45,7 @@ export async function postExternalLogin(provider: string, idToken: string) {
  * @returns The auth response with tokens and user info.
  */
 export async function postExternalCode(provider: string, code: string, codeVerifier: string, redirectUri: string) {
-  const resp = await axios.post<AuthResponse>('/api/auth/external/code',
+  const resp = await axios.post<AuthResponse>('/api/v1/auth/external/code',
     { provider, code, codeVerifier, redirectUri },
     { withCredentials: true }
   );
@@ -59,7 +59,7 @@ export async function postExternalCode(provider: string, code: string, codeVerif
 export async function refreshAuthToken(): Promise<AuthResponse | null> {
   try {
     const resp = await axios.post<AuthResponse>(
-      '/api/auth/refresh',
+      '/api/v1/auth/refresh',
       {},
       { withCredentials: true }
     );
@@ -74,7 +74,7 @@ export async function refreshAuthToken(): Promise<AuthResponse | null> {
  */
 export async function logout(): Promise<void> {
   try {
-    await axios.post('/api/auth/logout', {}, { withCredentials: true });
+    await axios.post('/api/v1/auth/logout', {}, { withCredentials: true });
   } catch {
     // Ignore errors during logout
   }

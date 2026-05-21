@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Statements.WebAPI.Contracts.Statements;
 using Statements.WebAPI.Services.Statements;
 
-namespace Statements.WebAPI.Controllers;
+namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
 public sealed class StatementsController : ControllerBase
 {
     private const long MaxUploadSizeInBytes = 10 * 1024 * 1024;
@@ -49,7 +49,7 @@ public sealed class StatementsController : ControllerBase
 
         if (userId is null)
         {
-            _logger.LogWarning("POST /api/statements/upload - Unauthorized: invalid user id in token");
+            _logger.LogWarning("POST /api/v1/statements/upload - Unauthorized: invalid user id in token");
             return Unauthorized("Authenticated user id is missing or invalid.");
         }
 
@@ -59,14 +59,14 @@ public sealed class StatementsController : ControllerBase
             return BadRequest("Upload a non-empty statement file.");
         }
 
-        _logger.LogInformation("POST /api/statements/upload called: UserId={UserId}, FileName={FileName}, Size={Size}",
+        _logger.LogInformation("POST /api/v1/statements/upload called: UserId={UserId}, FileName={FileName}, Size={Size}",
             userId, file.FileName, file.Length);
 
         try
         {
             var response = await _statementService.UploadAsync(userId.Value, bankAccountId, file, cancellationToken);
             _logger.LogInformation("Statement uploaded successfully: Id={StatementId}, Status={Status}", response.Id, response.Status);
-            return Created($"/api/statements/{response.Id}", response);
+            return Created($"/api/v1/statements/{response.Id}", response);
         }
         catch (InvalidOperationException exception)
         {

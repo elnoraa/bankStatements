@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Statements.WebAPI.Contracts.Statements;
-using Statements.WebAPI.Controllers;
+using Statements.WebAPI.Controllers.v1;
 using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Controllers;

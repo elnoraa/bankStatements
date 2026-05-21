@@ -3,10 +3,10 @@ using Microsoft.AspNetCore.RateLimiting;
 using Statements.WebAPI.Contracts.Auth;
 using Statements.WebAPI.Services.Auth;
 
-namespace Statements.WebAPI.Controllers;
+namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
 public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -47,7 +47,7 @@ public sealed class AuthController : ControllerBase
         RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/register called");
+        _logger.LogInformation("POST /api/v1/auth/register called");
         try
         {
             var response = await _authService.RegisterAsync(request, cancellationToken);
@@ -60,7 +60,7 @@ public sealed class AuthController : ControllerBase
                 response.AccessTokenExpiresAt,
                 response.User);
 
-            return Created("/api/auth/register", cookieResponse);
+            return Created("/api/v1/auth/register", cookieResponse);
         }
         catch (AuthConflictException exception)
         {
@@ -83,7 +83,7 @@ public sealed class AuthController : ControllerBase
         LoginRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/login called");
+        _logger.LogInformation("POST /api/v1/auth/login called");
         try
         {
             var response = await _authService.LoginAsync(request, cancellationToken);
@@ -122,7 +122,7 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<CookieAuthResponse>> Refresh(
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/refresh called");
+        _logger.LogInformation("POST /api/v1/auth/refresh called");
 
         var refreshToken = Request.Cookies["refresh_token"];
         if (string.IsNullOrWhiteSpace(refreshToken))
@@ -162,7 +162,7 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult> Logout(
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/logout called");
+        _logger.LogInformation("POST /api/v1/auth/logout called");
 
         var refreshToken = Request.Cookies["refresh_token"];
         if (!string.IsNullOrWhiteSpace(refreshToken))
@@ -189,7 +189,7 @@ public sealed class AuthController : ControllerBase
         ExternalLoginRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/external called (provider: {Provider})", request.Provider);
+        _logger.LogInformation("POST /api/v1/auth/external called (provider: {Provider})", request.Provider);
         try
         {
             var response = await _authService.ExternalLoginAsync(request, cancellationToken);
@@ -225,7 +225,7 @@ public sealed class AuthController : ControllerBase
         ExternalCodeRequest request,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("POST /api/auth/external/code called (provider: {Provider})", request.Provider);
+        _logger.LogInformation("POST /api/v1/auth/external/code called (provider: {Provider})", request.Provider);
         try
         {
             var section = _configuration.GetSection($"ExternalProviders:{request.Provider}");
@@ -304,49 +304,34 @@ public sealed class AuthController : ControllerBase
 
             return Ok(cookieResponse);
         }
-        catch (Exception ex)
+        catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "External code login failed for provider: {Provider}", request.Provider);
-            return BadRequest(ex.Message);
+            _logger.LogError("External code exchange failed: {Message}", ex.Message);
+            return BadRequest($"Token exchange failed: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Sets the refresh token as an httpOnly, SameSite=Strict cookie on the response.
-    /// </summary>
-    /// <param name="refreshToken">The refresh token value.</param>
-    /// <param name="expiresAt">The cookie expiration time.</param>
     private void SetRefreshTokenCookie(string refreshToken, DateTimeOffset expiresAt)
     {
-        var cookieOptions = new CookieOptions
+        Response.Cookies.Append("refresh_token", refreshToken, new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,
-            // In production behind HTTPS, this will be true. In dev over HTTP, it must be false for cookies to work.
-            Secure = Request.IsHttps,
-            Path = "/api/auth",
-            IsEssential = true,
-            Expires = expiresAt
-        };
-
-        Response.Cookies.Append("refresh_token", refreshToken, cookieOptions);
+            Secure = true,
+            Expires = expiresAt,
+            Path = "/api/v1/auth"
+        });
     }
 
-    /// <summary>
-    /// Clears the refresh token cookie by setting an expired empty cookie.
-    /// </summary>
     private void ClearRefreshTokenCookie()
     {
-        var cookieOptions = new CookieOptions
+        Response.Cookies.Append("refresh_token", "", new CookieOptions
         {
             HttpOnly = true,
             SameSite = SameSiteMode.Strict,
-            Secure = Request.IsHttps,
-            Path = "/api/auth",
-            IsEssential = true,
-            Expires = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-
-        Response.Cookies.Append("refresh_token", "", cookieOptions);
+            Secure = true,
+            Expires = DateTimeOffset.UnixEpoch,
+            Path = "/api/v1/auth"
+        });
     }
 }

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Moq;
 using Statements.WebAPI.Auth;
 using Statements.WebAPI.Contracts.Auth;
-using Statements.WebAPI.Controllers;
+using Statements.WebAPI.Controllers.v1;
 using Statements.WebAPI.Services.Auth;
 
 namespace Statements.WebAPI.Tests.Controllers;

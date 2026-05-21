@@ -5,11 +5,11 @@ using Microsoft.AspNetCore.Mvc;
 using Statements.WebAPI.Contracts.Analysis;
 using Statements.WebAPI.Services.Analysis;
 
-namespace Statements.WebAPI.Controllers;
+namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
 [Authorize]
-[Route("api/[controller]")]
+[Route("api/v1/[controller]")]
 public sealed class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
@@ -48,12 +48,12 @@ public sealed class AnalysisController : ControllerBase
 
         if (userId is null)
         {
-            _logger.LogWarning("GET /api/analysis/summary - Unauthorized: invalid user id in token");
+            _logger.LogWarning("GET /api/v1/analysis/summary - Unauthorized: invalid user id in token");
             return Unauthorized("Authenticated user id is missing or invalid.");
         }
 
         _logger.LogInformation(
-            "GET /api/analysis/summary called: UserId={UserId}, BankAccountId={BankAccountId}, From={From}, To={To}",
+            "GET /api/v1/analysis/summary called: UserId={UserId}, BankAccountId={BankAccountId}, From={From}, To={To}",
             userId, bankAccountId, from, to);
 
         if (from is not null && to is not null && from > to)

@@ -152,7 +152,7 @@ function App() {
     setIsAuthLoading(true);
     setAuthMessage('');
 
-    const path = authMode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const path = authMode === 'login' ? '/api/v1/auth/login' : '/api/v1/auth/register';
     const body = authMode === 'login'
       ? { email, password }
       : { email, password, ...(displayName ? { displayName } : {}) };
@@ -237,7 +237,7 @@ function App() {
     formData.append('file', selectedFile);
 
     try {
-      const response = await authedFetch(`${apiBaseUrl}/api/statements/upload`, {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/statements/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -269,7 +269,7 @@ function App() {
     setIsSummaryLoading(true);
 
     try {
-      const response = await authedFetch(`${apiBaseUrl}/api/analysis/summary`);
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/analysis/summary`);
 
       if (!response.ok) {
         throw new Error(await response.text());
