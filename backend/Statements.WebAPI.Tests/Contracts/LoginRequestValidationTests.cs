@@ -15,9 +15,7 @@ public sealed class LoginRequestValidationTests
     [Fact]
     public void WithValidData_PassesValidation()
     {
-        var request = new LoginRequest(
-            Email: "test@example.com",
-            Password: "SecureP@ss1");
+        var request = new LoginRequest { Email = "test@example.com", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -30,9 +28,7 @@ public sealed class LoginRequestValidationTests
     [Fact]
     public void WithMissingEmail_FailsValidation()
     {
-        var request = new LoginRequest(
-            Email: null!,
-            Password: "SecureP@ss1");
+        var request = new LoginRequest { Email = null!, Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -45,9 +41,7 @@ public sealed class LoginRequestValidationTests
     [Fact]
     public void WithInvalidEmailFormat_FailsValidation()
     {
-        var request = new LoginRequest(
-            Email: "not-an-email",
-            Password: "SecureP@ss1");
+        var request = new LoginRequest { Email = "not-an-email", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -60,9 +54,7 @@ public sealed class LoginRequestValidationTests
     [Fact]
     public void WithMissingPassword_FailsValidation()
     {
-        var request = new LoginRequest(
-            Email: "test@example.com",
-            Password: null!);
+        var request = new LoginRequest { Email = "test@example.com", Password = null! };
 
         var errors = Validate(request);
 
@@ -75,9 +67,7 @@ public sealed class LoginRequestValidationTests
     [Fact]
     public void WithShortPassword_FailsValidation()
     {
-        var request = new LoginRequest(
-            Email: "test@example.com",
-            Password: "1234567");
+        var request = new LoginRequest { Email = "test@example.com", Password = "1234567" };
 
         var errors = Validate(request);
 

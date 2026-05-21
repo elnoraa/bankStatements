@@ -15,10 +15,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithValidData_PassesValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "Test User",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "Test User", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -31,10 +28,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithMissingEmail_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: null!,
-            DisplayName: "Test User",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = null!, DisplayName = "Test User", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -47,10 +41,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithInvalidEmailFormat_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: "not-an-email",
-            DisplayName: "Test User",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = "not-an-email", DisplayName = "Test User", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -63,10 +54,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithShortPassword_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "Test User",
-            Password: "1234567");
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "Test User", Password = "1234567" };
 
         var errors = Validate(request);
 
@@ -76,10 +64,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithMissingPassword_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "Test User",
-            Password: null!);
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "Test User", Password = null! };
 
         var errors = Validate(request);
 
@@ -90,10 +75,7 @@ public sealed class RegisterRequestValidationTests
     public void WithMaxLengthEmail_PassesValidation()
     {
         var localPart = new string('a', 316);
-        var request = new RegisterRequest(
-            Email: $"{localPart}@b.c",
-            DisplayName: "Test User",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = $"{localPart}@b.c", DisplayName = "Test User", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -104,10 +86,7 @@ public sealed class RegisterRequestValidationTests
     public void WithTooLongEmail_FailsValidation()
     {
         var localPart = new string('a', 317);
-        var request = new RegisterRequest(
-            Email: $"{localPart}@b.c",
-            DisplayName: "Test User",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = $"{localPart}@b.c", DisplayName = "Test User", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -117,10 +96,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithTooLongPassword_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "Test User",
-            Password: new string('a', 201));
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "Test User", Password = new string('a', 201) };
 
         var errors = Validate(request);
 
@@ -130,10 +106,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithValidDisplayName_PassesValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "John O'Brien-Smith",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "John O'Brien-Smith", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -143,10 +116,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithInvalidDisplayNameCharacters_FailsValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: "Test@User!",
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = "Test@User!", Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 
@@ -156,10 +126,7 @@ public sealed class RegisterRequestValidationTests
     [Fact]
     public void WithNullDisplayName_PassesValidation()
     {
-        var request = new RegisterRequest(
-            Email: "test@example.com",
-            DisplayName: null,
-            Password: "SecureP@ss1");
+        var request = new RegisterRequest { Email = "test@example.com", DisplayName = null, Password = "SecureP@ss1" };
 
         var errors = Validate(request);
 

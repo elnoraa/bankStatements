@@ -96,7 +96,7 @@ public sealed class BankAccountsControllerTests
                 UpdatedAt = DateTimeOffset.UtcNow
             });
 
-        var request = new CreateBankAccountRequest("New Account", null);
+        var request = new CreateBankAccountRequest { AccountName = "New Account", BankName = null };
         var result = await _sut.Create(request, CancellationToken.None);
 
         var createdResult = result.Result.Should().BeOfType<CreatedResult>().Subject;
@@ -118,7 +118,7 @@ public sealed class BankAccountsControllerTests
     {
         SetupUserIdentity();
         var accountId = Guid.NewGuid();
-        var request = new UpdateBankAccountRequest("Updated", null);
+        var request = new UpdateBankAccountRequest { AccountName = "Updated", BankName = null };
 
         _bankAccountServiceMock
             .Setup(x => x.UpdateAsync(_userId, accountId, request, It.IsAny<CancellationToken>()))
@@ -143,7 +143,7 @@ public sealed class BankAccountsControllerTests
     {
         SetupUserIdentity();
         var accountId = Guid.NewGuid();
-        var request = new UpdateBankAccountRequest("Updated", null);
+        var request = new UpdateBankAccountRequest { AccountName = "Updated", BankName = null };
 
         _bankAccountServiceMock
             .Setup(x => x.UpdateAsync(_userId, accountId, request, It.IsAny<CancellationToken>()))

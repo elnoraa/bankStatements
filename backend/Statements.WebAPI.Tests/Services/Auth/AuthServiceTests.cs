@@ -60,7 +60,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_WithNewEmail_ReturnsAuthResponse()
     {
-        var request = new RegisterRequest("new@test.com", "New User", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "new@test.com", DisplayName = "New User", Password = "SecureP@ss1" };
         var userId = Guid.NewGuid();
 
         // No existing user found
@@ -102,7 +102,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_WithExistingEmail_ThrowsAuthConflictException()
     {
-        var request = new RegisterRequest("existing@test.com", "Existing", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "existing@test.com", DisplayName = "Existing", Password = "SecureP@ss1" };
         var existingUserId = Guid.NewGuid();
 
         _dbExecutorMock
@@ -118,7 +118,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task RegisterAsync_WithNullDisplayName_UsesEmailPrefix()
     {
-        var request = new RegisterRequest("testuser@test.com", null, "SecureP@ss1");
+        var request = new RegisterRequest { Email = "testuser@test.com", DisplayName = null, Password = "SecureP@ss1" };
         var userId = Guid.NewGuid();
 
         _dbExecutorMock
@@ -157,7 +157,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LoginAsync_WithValidCredentials_ReturnsAuthResponse()
     {
-        var request = new LoginRequest("test@test.com", "CorrectP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "CorrectP@ss1" };
         var userId = Guid.NewGuid();
 
         var user = new AuthUser
@@ -200,7 +200,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LoginAsync_WithInvalidPassword_ThrowsAuthInvalidCredentialsException()
     {
-        var request = new LoginRequest("test@test.com", "WrongP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "WrongP@ss1" };
         var userId = Guid.NewGuid();
 
         var user = new AuthUser
@@ -236,7 +236,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LoginAsync_WithNonexistentEmail_ThrowsAuthInvalidCredentialsException()
     {
-        var request = new LoginRequest("nonexistent@test.com", "SomeP@ss1");
+        var request = new LoginRequest { Email = "nonexistent@test.com", Password = "SomeP@ss1" };
 
         _dbExecutorMock
             .Setup(x => x.QueryFirstOrDefaultAsync<AuthUser>(It.IsAny<CommandDefinition>()))
@@ -253,7 +253,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LoginAsync_WithLockedAccount_ThrowsAuthAccountLockedException()
     {
-        var request = new LoginRequest("test@test.com", "AnyP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "AnyP@ss1" };
         var lockedUntil = DateTime.UtcNow.AddMinutes(10);
 
         var user = new AuthUser
@@ -283,7 +283,7 @@ public sealed class AuthServiceTests
     [Fact]
     public async Task LoginAsync_OnSuccess_ResetsFailedLoginAttempts()
     {
-        var request = new LoginRequest("test@test.com", "CorrectP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "CorrectP@ss1" };
         var user = new AuthUser
         {
             Id = Guid.NewGuid(),

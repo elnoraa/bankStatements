@@ -76,7 +76,7 @@ public sealed class BankAccountIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange
         await SeedUserAsync(_userId);
-        var request = new CreateBankAccountRequest("My Account", "Test Bank");
+        var request = new CreateBankAccountRequest { AccountName = "My Account", BankName = "Test Bank" };
 
         // Act
         var result = await _sut.CreateAsync(_userId, request, CancellationToken.None);
@@ -127,7 +127,7 @@ public sealed class BankAccountIntegrationTests : IClassFixture<DatabaseFixture>
         // Arrange
         await SeedUserAsync(_userId);
         var accountId = await SeedAccountAsync(_userId, "Original Name");
-        var request = new UpdateBankAccountRequest("Renamed", "New Bank");
+        var request = new UpdateBankAccountRequest { AccountName = "Renamed", BankName = "New Bank" };
 
         // Act
         var result = await _sut.UpdateAsync(_userId, accountId, request, CancellationToken.None);

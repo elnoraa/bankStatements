@@ -85,7 +85,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     [Fact]
     public async Task RegisterAsync_WithNewEmail_CreatesUserAndRefreshToken()
     {
-        var request = new RegisterRequest("newuser@test.com", "New User", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "newuser@test.com", DisplayName = "New User", Password = "SecureP@ss1" };
 
         var result = await _sut.RegisterAsync(request, CancellationToken.None);
 
@@ -128,11 +128,11 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     public async Task RegisterAsync_WithDuplicateEmail_ThrowsAuthConflictException()
     {
         // First registration succeeds
-        var request = new RegisterRequest("dupe@test.com", "First User", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "dupe@test.com", DisplayName = "First User", Password = "SecureP@ss1" };
         await _sut.RegisterAsync(request, CancellationToken.None);
 
         // Second registration with same email fails
-        var duplicateRequest = new RegisterRequest("dupe@test.com", "Second User", "OtherP@ss1");
+        var duplicateRequest = new RegisterRequest { Email = "dupe@test.com", DisplayName = "Second User", Password = "OtherP@ss1" };
         var act = () => _sut.RegisterAsync(duplicateRequest, CancellationToken.None);
 
         await act.Should().ThrowAsync<AuthConflictException>();
@@ -148,7 +148,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     [Fact]
     public async Task RegisterAsync_WithNullDisplayName_UsesEmailPrefix()
     {
-        var request = new RegisterRequest("prefixuser@test.com", null, "SecureP@ss1");
+        var request = new RegisterRequest { Email = "prefixuser@test.com", DisplayName = null, Password = "SecureP@ss1" };
 
         var result = await _sut.RegisterAsync(request, CancellationToken.None);
 
@@ -161,11 +161,11 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     public async Task LoginAsync_WithValidCredentials_ReturnsAuthResponse()
     {
         // Arrange: register a user first
-        var registerRequest = new RegisterRequest("loginuser@test.com", "Login User", "SecureP@ss1");
+        var registerRequest = new RegisterRequest { Email = "loginuser@test.com", DisplayName = "Login User", Password = "SecureP@ss1" };
         await _sut.RegisterAsync(registerRequest, CancellationToken.None);
 
         // Act: login with same credentials
-        var loginRequest = new LoginRequest("loginuser@test.com", "SecureP@ss1");
+        var loginRequest = new LoginRequest { Email = "loginuser@test.com", Password = "SecureP@ss1" };
         var result = await _sut.LoginAsync(loginRequest, CancellationToken.None);
 
         // Assert
@@ -188,12 +188,12 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange: register a user
         await _sut.RegisterAsync(
-            new RegisterRequest("wrongpass@test.com", "Wrong Pass", "SecureP@ss1"),
+            new RegisterRequest { Email = "wrongpass@test.com", DisplayName = "Wrong Pass", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         // Act
         var act = () => _sut.LoginAsync(
-            new LoginRequest("wrongpass@test.com", "WrongPassword1"),
+            new LoginRequest { Email = "wrongpass@test.com", Password = "WrongPassword1" },
             CancellationToken.None);
 
         // Assert
@@ -212,14 +212,14 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange: register a user
         await _sut.RegisterAsync(
-            new RegisterRequest("lockuser@test.com", "Lock User", "SecureP@ss1"),
+            new RegisterRequest { Email = "lockuser@test.com", DisplayName = "Lock User", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         // Act: fail login 5 times to trigger lockout
         for (int i = 0; i < 5; i++)
         {
             var act = () => _sut.LoginAsync(
-                new LoginRequest("lockuser@test.com", "WrongPassword1"),
+                new LoginRequest { Email = "lockuser@test.com", Password = "WrongPassword1" },
                 CancellationToken.None);
 
             await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
@@ -227,7 +227,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
 
         // The 6th attempt should throw AuthAccountLockedException
         var lockedAct = () => _sut.LoginAsync(
-            new LoginRequest("lockuser@test.com", "WrongPassword1"),
+            new LoginRequest { Email = "lockuser@test.com", Password = "WrongPassword1" },
             CancellationToken.None);
 
         var exception = await lockedAct.Should().ThrowAsync<AuthAccountLockedException>();
@@ -267,7 +267,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
 
         // Act
         var act = () => _sut.LoginAsync(
-            new LoginRequest("lockeduser@test.com", "SecureP@ss1"),
+            new LoginRequest { Email = "lockeduser@test.com", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         // Assert
@@ -279,7 +279,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     public async Task LoginAsync_WithNonexistentEmail_ThrowsAuthInvalidCredentialsException()
     {
         var act = () => _sut.LoginAsync(
-            new LoginRequest("nonexistent@test.com", "SomePassword1"),
+            new LoginRequest { Email = "nonexistent@test.com", Password = "SomePassword1" },
             CancellationToken.None);
 
         await act.Should().ThrowAsync<AuthInvalidCredentialsException>();
@@ -292,7 +292,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange: register a user to get a real refresh token
         var registerResult = await _sut.RegisterAsync(
-            new RegisterRequest("refreshtest@test.com", "Refresh", "SecureP@ss1"),
+            new RegisterRequest { Email = "refreshtest@test.com", DisplayName = "Refresh", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         var oldRefreshToken = registerResult.RefreshToken;
@@ -320,7 +320,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange: register, then revoke
         var registerResult = await _sut.RegisterAsync(
-            new RegisterRequest("revokerefresh@test.com", "Revoke", "SecureP@ss1"),
+            new RegisterRequest { Email = "revokerefresh@test.com", DisplayName = "Revoke", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         var refreshToken = registerResult.RefreshToken;
@@ -382,7 +382,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     {
         // Arrange: register to get a refresh token
         var registerResult = await _sut.RegisterAsync(
-            new RegisterRequest("revoketest@test.com", "Revoke Test", "SecureP@ss1"),
+            new RegisterRequest { Email = "revoketest@test.com", DisplayName = "Revoke Test", Password = "SecureP@ss1" },
             CancellationToken.None);
 
         var refreshToken = registerResult.RefreshToken;

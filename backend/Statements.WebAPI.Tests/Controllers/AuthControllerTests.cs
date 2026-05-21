@@ -75,7 +75,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task Register_WithValidRequest_ReturnsCreated()
     {
-        var request = new RegisterRequest("test@test.com", "Test User", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "test@test.com", DisplayName = "Test User", Password = "SecureP@ss1" };
         var authResponse = CreateTestAuthResponse();
 
         _authServiceMock
@@ -99,7 +99,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task Register_WithDuplicateEmail_ReturnsConflict()
     {
-        var request = new RegisterRequest("existing@test.com", "Existing", "SecureP@ss1");
+        var request = new RegisterRequest { Email = "existing@test.com", DisplayName = "Existing", Password = "SecureP@ss1" };
 
         _authServiceMock
             .Setup(x => x.RegisterAsync(request, It.IsAny<CancellationToken>()))
@@ -118,7 +118,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task Login_WithValidCredentials_ReturnsOk()
     {
-        var request = new LoginRequest("test@test.com", "CorrectP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "CorrectP@ss1" };
         var authResponse = CreateTestAuthResponse();
 
         _authServiceMock
@@ -141,7 +141,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task Login_WithInvalidCredentials_ReturnsUnauthorized()
     {
-        var request = new LoginRequest("test@test.com", "WrongP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "WrongP@ss1" };
 
         _authServiceMock
             .Setup(x => x.LoginAsync(request, It.IsAny<CancellationToken>()))
@@ -158,7 +158,7 @@ public sealed class AuthControllerTests
     [Fact]
     public async Task Login_WithLockedAccount_ReturnsUnauthorizedWithLockedUntil()
     {
-        var request = new LoginRequest("test@test.com", "AnyP@ss1");
+        var request = new LoginRequest { Email = "test@test.com", Password = "AnyP@ss1" };
         var lockedUntil = DateTime.UtcNow.AddMinutes(15);
 
         _authServiceMock

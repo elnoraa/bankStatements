@@ -86,7 +86,7 @@ public sealed class BankAccountServiceTests
     public async Task CreateAsync_WithCustomName_CreatesNamedAccount()
     {
         var accountId = Guid.NewGuid();
-        var request = new CreateBankAccountRequest("My Account", "Test Bank");
+        var request = new CreateBankAccountRequest { AccountName = "My Account", BankName = "Test Bank" };
 
         _dbExecutorMock
             .Setup(x => x.QuerySingleAsync<BankAccountResponse>(It.IsAny<CommandDefinition>()))
@@ -112,7 +112,7 @@ public sealed class BankAccountServiceTests
     public async Task UpdateAsync_WithValidAccount_UpdatesName()
     {
         var accountId = Guid.NewGuid();
-        var request = new UpdateBankAccountRequest("Renamed Account", null);
+        var request = new UpdateBankAccountRequest { AccountName = "Renamed Account", BankName = null };
 
         _dbExecutorMock
             .Setup(x => x.QuerySingleOrDefaultAsync<BankAccountResponse>(It.IsAny<CommandDefinition>()))
@@ -136,7 +136,7 @@ public sealed class BankAccountServiceTests
     public async Task UpdateAsync_WithNonexistentAccount_ThrowsInvalidOperationException()
     {
         var accountId = Guid.NewGuid();
-        var request = new UpdateBankAccountRequest("New Name", null);
+        var request = new UpdateBankAccountRequest { AccountName = "New Name", BankName = null };
 
         _dbExecutorMock
             .Setup(x => x.QuerySingleOrDefaultAsync<BankAccountResponse>(It.IsAny<CommandDefinition>()))
