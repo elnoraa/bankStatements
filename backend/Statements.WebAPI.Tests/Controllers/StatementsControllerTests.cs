@@ -221,4 +221,73 @@ public sealed class StatementsControllerTests
 
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
+
+    // --- GET /api/v1/statements (List) tests ---
+
+    [Fact]
+    public async Task List_WithValidUser_ReturnsOk()
+    {
+        SetupUserIdentity();
+
+        _statementServiceMock
+            .Setup(x => x.ListAsync(_userId, It.IsAny<int>(), It.IsAny<int>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<StatementListItemResponse>());
+
+        var result = await _sut.List(1, 20, CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    [Fact]
+    public async Task List_WithoutAuth_ReturnsUnauthorized()
+    {
+        SetupNoUserIdentity();
+
+        var result = await _sut.List(1, 20, CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnauthorizedObjectResult>();
+    }
+
+    // --- POST /api/v1/statements/{id}/retry tests ---
+
+    [Fact]
+    public async Task Retry_WithFailedStatement_ReturnsOk()
+    {
+        SetupUserIdentity();
+        var statementId = Guid.NewGuid();
+
+        _statementServiceMock
+            .Setup(x => x.RetryAsync(_userId, statementId, It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.Retry(statementId, CancellationToken.None);
+
+        var okResult = result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(200);
+    }
+
+    [Fact]
+    public async Task Retry_WithNonFailedStatement_ReturnsBadRequest()
+    {
+        SetupUserIdentity();
+        var statementId = Guid.NewGuid();
+
+        _statementServiceMock
+            .Setup(x => x.RetryAsync(_userId, statementId, It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Only failed statements can be retried."));
+
+        var result = await _sut.Retry(statementId, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    [Fact]
+    public async Task Retry_WithoutAuth_ReturnsUnauthorized()
+    {
+        SetupNoUserIdentity();
+
+        var result = await _sut.Retry(Guid.NewGuid(), CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedObjectResult>();
+    }
 }

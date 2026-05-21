@@ -1,6 +1,6 @@
 # BankStatements — Backend API
 
-The backend is an ASP.NET Core 10 Web API that handles user authentication, PDF statement uploads, transaction parsing, and spending analysis against a PostgreSQL database.
+The backend is an ASP.NET Core 10 Web API that handles user authentication, PDF statement uploads, transaction parsing, and spending analysis against a PostgreSQL database. Background processing uses RabbitMQ, and real-time status updates use SignalR.
 
 ---
 
@@ -10,98 +10,104 @@ The backend is an ASP.NET Core 10 Web API that handles user authentication, PDF 
 backend/
 ├── Statements.WebAPI/               # Main API project
 │   ├── Auth/                        # Authentication primitives
-│   │   ├── BCryptPasswordHasher.cs  # BCrypt hash/verify
-│   │   ├── IJwtTokenService.cs      # JWT generation interface
-│   │   ├── IPasswordHasher.cs       # Password hashing interface
-│   │   ├── JwtAccessToken.cs        # Access token model
-│   │   ├── JwtOptions.cs            # JWT configuration options
-│   │   └── JwtTokenService.cs       # JWT + refresh token implementation
 │   ├── Contracts/                   # Request/response DTOs
 │   │   ├── Auth/                    # Login, Register, ExternalLogin, Refresh DTOs
-│   │   ├── Analysis/                # Spending summary response
-│   │   └── Statements/              # Statement upload response
+│   │   ├── Analysis/                # Spending summary, categories, budgets, transactions
+│   │   ├── Messages/                # RabbitMQ message contracts
+│   │   └── Statements/              # Statement upload/list/retry responses
 │   ├── Controllers/                 # API endpoint controllers
-│   │   ├── AuthController.cs        # /api/auth/*
-│   │   ├── StatementsController.cs  # /api/statements/*
-│   │   ├── AnalysisController.cs    # /api/analysis/*
+│   │   ├── v1/AuthController.cs        # /api/v1/auth/*
+│   │   ├── v1/StatementsController.cs  # /api/v1/statements/* (upload, list, retry, status)
+│   │   ├── v1/AnalysisController.cs    # /api/v1/analysis/* (summary, categories, export)
+│   │   ├── v1/TransactionsController.cs # /api/v1/transactions/* (edit)
+│   │   ├── v1/BudgetsController.cs     # /api/v1/budgets/* (CRUD + progress)
+│   │   ├── v1/BankAccountsController.cs # /api/v1/bank-accounts/*
 │   │   └── HealthController.cs      # /api/health
-│   ├── Data/                        # Data access layer
-│   │   ├── IDbConnectionFactory.cs  # Connection factory interface
-│   │   ├── NpgsqlConnectionFactory.cs # PostgreSQL implementation
-│   │   ├── IDbExecutor.cs           # Query executor interface
-│   │   └── DapperDbExecutor.cs      # Dapper implementation
-│   ├── Infrastructure/              # Cross-cutting concerns
-│   │   ├── DateOnlyHandler.cs       # Dapper type handler for DateOnly
-│   │   └── NullableDateOnlyHandler.cs
-│   ├── Models/                      # Domain models
-│   │   └── WeatherForecast.cs       # Scaffold (can be removed)
+│   ├── Data/                        # Data access layer (Dapper + Npgsql)
+│   ├── Hubs/                        # SignalR hubs
+│   │   └── StatementProcessingHub.cs  # Real-time status updates at /hubs/statement-processing
+│   ├── Infrastructure/              # Dapper type handlers
 │   ├── Services/                    # Business logic
-│   │   ├── Auth/
-│   │   │   ├── IAuthService.cs      # Auth service interface
-│   │   │   ├── AuthService.cs       # Register, login, token refresh, OAuth
-│   │   │   ├── IExternalAuthValidator.cs
-│   │   │   └── ExternalAuthValidator.cs # Google/Auth0 token validation
-│   │   ├── Analysis/
-│   │   │   ├── IAnalysisService.cs
-│   │   │   └── AnalysisService.cs   # Spending aggregation & summary
-│   │   └── Statements/
-│   │       ├── IStatementService.cs
-│   │       ├── StatementService.cs  # Upload, scan, parse, store
-│   │       ├── IStatementParser.cs
-│   │       ├── PdfStatementParser.cs # PDF text extraction via PdfPig
-│   │       ├── IVirusScanService.cs
-│   │       └── ClamAvVirusScanService.cs # ClamAV client
+│   │   ├── Auth/                    # Register, login, token refresh, OAuth
+│   │   ├── Analysis/                # Spending aggregation, budgets, transaction editing
+│   │   ├── BankAccounts/            # Bank account CRUD
+│   │   ├── Export/                  # CSV export
+│   │   ├── Messaging/               # RabbitMQ publisher + background consumer
+│   │   └── Statements/              # Upload, virus scan, PDF parsing, background processing
 │   ├── Program.cs                   # Entry point, DI, middleware
-│   ├── appsettings.json             # Base config + Serilog + ClamAV
-│   └── appsettings.Development.json # Dev overrides
-├── Statements.WebAPI.Tests/         # Test project
+│   └── appsettings*.json
+├── Statements.WebAPI.Tests/         # xUnit test project (210+ tests)
 │   ├── Contracts/                   # Request validation tests
 │   ├── Controllers/                 # Controller unit tests
 │   ├── Infrastructure/              # DateOnly handler tests
-│   ├── IntegrationTests/            # E2E tests with Testcontainers
-│   │   ├── AuthServiceIntegrationTests.cs
-│   │   ├── DatabaseFixture.cs
-│   │   └── TestSqlScripts.cs
+│   ├── IntegrationTests/            # E2E tests with Testcontainers PostgreSQL
 │   └── Services/                    # Service unit tests
 ├── Uploads/                         # Uploaded PDF storage
-└── Dockerfile                       # Multi-stage build
+└── Dockerfile                       # Multi-stage build (test → test-integration → runtime)
 ```
 
 ---
 
-## How to Add a New Endpoint
+## API Endpoints
 
-1. **Create a contract** — Add request/response DTOs in the appropriate `Contracts/` subfolder
-2. **Add a service interface + implementation** — Business logic goes in `Services/` — register in DI in `Program.cs`
-3. **Add a controller action** — Create or extend a controller in `Controllers/`
-4. **Register in DI** — Add the service registration to `Program.cs` (e.g., `builder.Services.AddScoped<IMyService, MyService>()`)
-5. **Add validation** — Add request validation tests in the test project
-6. **Add unit tests** — Test the controller and service in `Statements.WebAPI.Tests/`
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/auth/register` | Register a new user |
+| POST | `/api/v1/auth/login` | Login with email/password |
+| POST | `/api/v1/auth/refresh` | Refresh JWT access token |
+| POST | `/api/v1/auth/external` | OAuth ID token login |
+| POST | `/api/v1/auth/external/code` | OAuth PKCE code exchange |
+| POST | `/api/v1/auth/logout` | Revoke refresh token |
+| GET | `/api/v1/bank-accounts` | List user's bank accounts |
+| POST | `/api/v1/bank-accounts` | Create a bank account |
+| PUT | `/api/v1/bank-accounts/{id}` | Rename a bank account |
+| DELETE | `/api/v1/bank-accounts/{id}` | Delete a bank account (cascades to statements) |
+| POST | `/api/v1/statements/upload` | Upload a PDF statement |
+| GET | `/api/v1/statements` | List all statements (paginated) |
+| GET | `/api/v1/statements/{id}` | Get statement status (for polling) |
+| POST | `/api/v1/statements/{id}/retry` | Retry a failed statement |
+| GET | `/api/v1/analysis/summary` | Spending summary with category breakdown |
+| GET | `/api/v1/analysis/categories` | List available transaction categories |
+| GET | `/api/v1/analysis/export` | Download transactions as CSV |
+| PUT | `/api/v1/transactions/{id}` | Edit a transaction (description, category) |
+| GET | `/api/v1/budgets` | List monthly budgets |
+| POST | `/api/v1/budgets` | Create or update a budget |
+| DELETE | `/api/v1/budgets/{id}` | Delete a budget |
+| GET | `/api/v1/budgets/progress` | Budget vs actual spending |
+| GET | `/api/health` | Health check |
+
+### WebSocket (SignalR)
+
+| Hub | Endpoint | Description |
+|-----|----------|-------------|
+| `StatementProcessingHub` | `/hubs/statement-processing` | Push status updates (uploaded → processing → processed/failed) |
+
+---
+
+## Background Processing
+
+Statement processing uses RabbitMQ for durability and retry:
+
+1. Upload → virus scan → insert DB row (status=`uploaded`) → publish to `process-statement` queue
+2. `StatementProcessingBackgroundService` consumes the queue → parse PDF → insert transactions → update status to `processed`
+3. On failure: status set to `failed`, error stored, retry available via the retry endpoint
+4. Status changes are pushed to connected clients via SignalR
 
 ---
 
 ## Database Migrations
 
-Migration files live in `database/init/` and follow this naming convention:
-
-```
-NNN_description.sql
-```
-
-Where `NNN` is a zero-padded sequence number. Files are executed alphabetically on database initialisation via the PostgreSQL Docker entrypoint (`/docker-entrypoint-initdb.d`).
-
-**Current migrations:**
+Migration files live in `database/init/` and are executed alphabetically on container startup.
 
 | File | Description |
 |------|-------------|
-| `001_create_tables.sql` | Core schema — users, refresh tokens, bank accounts, statements, transactions, categories, analysis runs |
-| `002_seed_data.sql` | Demo user, bank account, and sample transactions |
+| `001_create_tables.sql` | Core schema — users, refresh tokens, bank accounts, statements, transactions, categories, analysis runs, external logins |
+| `002_seed_data.sql` | Demo user, bank account, sample transactions, 16 categories |
 | `003_add_scan_columns.sql` | Adds `scan_status` and `scanned_at` to `bank_statements` |
 | `004_add_user_lock_columns.sql` | Adds `failed_login_attempts` and `locked_until` to `app_users` |
-
-To add a new migration:
-1. Create `005_your_description.sql` in `database/init/`
-2. Run `docker compose down` and `docker compose up --build` — PostgreSQL will execute the new file on a fresh volume, or you can apply it manually via pgAdmin.
+| `005_make_bank_account_id_required.sql` | Makes `bank_account_id` NOT NULL with CASCADE delete |
+| `006_add_background_processing.sql` | Adds `failed_at`, `error_message`, and `processing` status to `bank_statements` |
+| `007_add_budgets_table.sql` | Creates `budgets` table for monthly budget tracking |
 
 ---
 
@@ -119,37 +125,18 @@ To add a new migration:
 ### Conventions
 
 - **Unit tests** — No special trait. Test controllers, services, and contracts in isolation.
-- **Integration tests** — Marked with `[Trait("Category", "Integration")]`. These spin up a temporary PostgreSQL container and test real database interactions.
+- **Integration tests** — Marked with `[Trait("Category", "Integration")]`. Uses Testcontainers PostgreSQL.
 
 ### Running tests
 
 ```bash
 # Unit tests only (build gate)
-docker build --target test -t backend-tests ./backend
-docker run --rm backend-tests
+docker compose build test-unit
+docker compose run --rm test-unit
 
 # Integration tests
 docker compose run --rm test-integration
-
-# Both (via Dockerfile multi-stage)
-docker build --target test-integration -t backend-tests ./backend
-docker run --rm backend-tests
 ```
-
----
-
-## Key Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `Dapper` | Micro-ORM for PostgreSQL queries |
-| `Npgsql` | PostgreSQL ADO.NET provider |
-| `BCrypt.Net-Next` | Password hashing and verification |
-| `Microsoft.AspNetCore.Authentication.JwtBearer` | JWT token validation |
-| `UglyToad.PdfPig` | PDF text extraction |
-| `nClam` | ClamAV virus scan client |
-| `Serilog.AspNetCore` | Structured logging (console + rolling file, 14-day retention) |
-| `Scalar.AspNetCore` | OpenAPI reference UI (dev only) |
 
 ---
 
@@ -165,8 +152,11 @@ ConnectionStrings__DefaultConnection=Host=db;Database=bankdb;Username=user;Passw
 Jwt__Issuer=Statements.WebAPI
 Jwt__Audience=Statements.Client
 Jwt__Secret=<min-32-char-key>
-Jwt__AccessTokenMinutes=15
-Jwt__RefreshTokenDays=30
+
+# RabbitMQ
+RabbitMq__Host=rabbitmq
+RabbitMq__Username=guest
+RabbitMq__Password=guest
 
 # File storage
 FileStorage__UploadsDirectory=/uploads
@@ -174,18 +164,22 @@ FileStorage__UploadsDirectory=/uploads
 # ClamAV
 ClamAv__Host=clamav
 ClamAv__Port=3310
-
-# External auth (optional)
-ExternalProviders__Auth0__Authority=https://dev-bankstatements.au.auth0.com
-ExternalProviders__Auth0__ClientId=...
-ExternalProviders__Auth0__Audience=...
-ExternalProviders__Google__ClientId=...
-ExternalProviders__Google__ClientSecret=...
 ```
 
-### appsettings.json
+---
 
-Non-sensitive defaults live in `appsettings.json` — notably the Serilog logging configuration and ClamAV timeout settings.
+## Key Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `Dapper` | Micro-ORM for PostgreSQL queries |
+| `Npgsql` | PostgreSQL ADO.NET provider |
+| `RabbitMQ.Client` | Message queue client for async processing |
+| `BCrypt.Net-Next` | Password hashing |
+| `UglyToad.PdfPig` | PDF text extraction |
+| `nClam` | ClamAV virus scan client |
+| `Serilog.AspNetCore` | Structured logging |
+| `Scalar.AspNetCore` | OpenAPI reference UI (dev only) |
 
 ---
 
@@ -195,14 +189,11 @@ Non-sensitive defaults live in `appsettings.json` — notably the Serilog loggin
 ```
 Register → BCrypt hash password → Store user
 Login → Verify password → Check lockout → Generate JWT (15min) + Refresh token (30d)
-Refresh → Validate refresh token → Rotate (revoke old, issue new pair)
 ```
 
 ### OAuth (Google / Auth0)
 ```
-ID Token flow:  Frontend sends provider JWT → Backend validates signature → Create/link account
-Code (PKCE):    Frontend exchanges code with provider → Sends code to backend → Backend validates with provider → Create/link account
+Frontend sends provider JWT → Backend validates signature → Create/link account
 ```
-
-- **Email auto-linking**: If an OAuth provider email matches an existing local account, the accounts are linked
-- **Fallback email**: Users without a provider email get `{provider}:{provider_key}@noemail.local`
+- Email auto-linking links OAuth accounts to existing local accounts by email
+- Rate limited: 2 req/15min per IP for login/register

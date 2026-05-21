@@ -1,6 +1,6 @@
 # BankStatements — Frontend
 
-The frontend is a React 19 single-page application (SPA) built with TypeScript and Vite. It provides the UI for uploading bank statement PDFs, viewing parsed transactions, and analysing spending. It communicates with the backend API via Axios.
+The frontend is a React 19 single-page application (SPA) built with TypeScript and Vite. It provides the UI for uploading bank statement PDFs, viewing and editing parsed transactions, tracking budgets, and analysing spending. Real-time updates use SignalR with polling fallback.
 
 ---
 
@@ -12,6 +12,7 @@ The frontend is a React 19 single-page application (SPA) built with TypeScript a
 | TypeScript | 6.0 |
 | Vite | 8.0 |
 | Axios | 1.16 |
+| SignalR | 8.0 |
 | ESLint | 10.3 |
 
 ---
@@ -20,13 +21,11 @@ The frontend is a React 19 single-page application (SPA) built with TypeScript a
 
 ### Via Docker (recommended)
 
-The frontend runs inside a Docker container as part of the full stack:
-
 ```bash
 # From repo root — starts all services
 docker compose up --build
 
-# Frontend-only (if backend is already running)
+# Frontend-only
 docker compose up --build frontend
 ```
 
@@ -40,8 +39,6 @@ npm install
 npm run dev
 ```
 
-> ⚠️ The standalone dev server expects the backend API at the URL specified by `VITE_API_BASE_URL`. See [Configuration](#configuration) below.
-
 ---
 
 ## Available Scripts
@@ -51,60 +48,90 @@ npm run dev
 | `npm run dev` | Start Vite dev server with HMR |
 | `npm run build` | TypeScript check + production build |
 | `npm run lint` | Run ESLint across all source files |
-| `npm run preview` | Preview the production build |
 
 ---
 
 ## Configuration
 
-The frontend is configured via environment variables at build time. In Docker, these are passed through from `.env`.
-
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `VITE_API_BASE_URL` | `http://localhost:5213` | Backend API base URL |
-| `VITE_GOOGLE_CLIENT_ID` | — | Google OAuth client ID for social login |
+| `VITE_GOOGLE_CLIENT_ID` | — | Google OAuth client ID |
 | `VITE_AUTH0_DOMAIN` | — | Auth0 tenant domain |
 | `VITE_AUTH0_CLIENT_ID` | — | Auth0 application client ID |
 
-### OAuth Configuration
-
-To enable social login with Google or Auth0:
-
-1. Set the relevant `VITE_*` variables in `.env` (at the repo root)
-2. Ensure the backend has matching `ExternalProviders__*` variables configured
-3. For Google: add `http://localhost:3000` to your Google Cloud Console authorised JavaScript origins
-4. For Auth0: add `http://localhost:3000` to your Auth0 application's allowed callback URLs
+Proxy config in `vite.config.ts` forwards `/api` and `/hubs` (SignalR WebSocket) to the backend.
 
 ---
 
-## Key Files
+## Project Structure
 
-| File | Purpose |
-|------|---------|
-| `src/App.tsx` | Main application component — manages auth state, file upload, and spending summary display |
-| `src/components/ExternalLoginButtons.tsx` | Google and Auth0 sign-in buttons with modal OAuth flow |
-| `src/services/externalAuth.ts` | Axios-based API client — login, register, OAuth, token refresh, statement upload, analysis fetch |
-| `src/App.css` | Application styles |
-| `src/index.css` | Global styles and resets |
+```
+src/
+├── types.ts                         # Shared TypeScript types and constants
+├── App.tsx                          # Main component — auth, routing, state management
+├── App.css                          # Application styles
+├── components/
+│   ├── AccountToolbar.tsx           # Bank account selector, rename, delete
+│   ├── AuthPanel.tsx                # Login/register form
+│   ├── BudgetBar.tsx                # Budget progress bar (ok/warning/over)
+│   ├── BudgetManager.tsx            # Monthly budget management UI
+│   ├── ExternalLoginButtons.tsx     # Google/Auth0 OAuth buttons
+│   ├── MetricStrip.tsx              # Total credit/debit/cashflow metrics
+│   ├── RecentActivity.tsx           # Recent transactions with inline editing
+│   ├── SpendingBreakdown.tsx        # Category breakdown with budget bars
+│   ├── StatementManager.tsx         # Statement history with status badges and retry
+│   ├── TransactionRow.tsx           # Editable transaction row (double-click to edit)
+│   └── UploadPanel.tsx              # PDF upload form with live status
+├── hooks/
+│   └── useStatementHub.ts           # SignalR connection hook with reconnect
+└── services/
+    └── externalAuth.ts              # API client (Axios)
+```
 
-### Auth State Management
+---
 
-The app manages authentication entirely in-memory:
+## Key Features
 
-- **Access token** — Stored in a React `useRef` (never persisted to storage or cookies)
-- **Refresh token** — Handled via an httpOnly `SameSite=Strict` cookie (inaccessible to JavaScript)
-- **Auto-refresh** — On page load, the app calls `refreshAuthToken()` using the httpOnly cookie to obtain a new access token
-- **401 handling** — If an API call returns 401, the `authedFetch` helper attempts a token refresh and retries the request
+### Statement Upload
+- Upload PDFs via the upload panel — status updates in real-time via SignalR
+- Falls back to 2-second polling if SignalR connection fails
+
+### Statement History
+- See all uploaded statements with status badges (uploaded/processing/processed/failed)
+- Retry failed statements with one click
+
+### Transaction Editing
+- Double-click any transaction to edit its description and category inline
+- Changes are saved immediately via the API
+
+### CSV Export
+- Download the current transaction view as a CSV file
+- Filters (bank account, date range) are respected in the export
+
+### Budget Tracking
+- Set monthly budgets per category using the budget manager
+- Progress bars in the spending breakdown show ok/warning/over status
+- Budgets update in real-time as new statements are processed
+
+### Spending Analysis
+- Category breakdown with transaction counts
+- Total credit, total debit, and net cashflow metrics
+- Recent transactions list
+
+### Auth
+- Local email/password authentication
+- Google and Auth0 OAuth via PKCE popup flow
+- Access tokens stored in memory only (never localStorage)
+- Automatic 401 retry with token refresh
 
 ---
 
 ## API Client
 
-All API calls go through Axios with `withCredentials: true` for cookie-based refresh token support. The client in `src/services/externalAuth.ts` provides:
+The app uses two fetch strategies:
 
-- `postLogin()` / `postRegister()` — Local auth
-- `postExternalLogin()` / `postExternalCode()` — OAuth flows
-- `refreshAuthToken()` — Refresh access token via cookie
-- `logout()` — Revoke refresh token and clear session
-- `uploadStatement()` — Upload PDF (multipart/form-data with auth header)
-- `getAnalysisSummary()` — Fetch spending analysis with optional filters
+1. **`authedFetch`** — Native `fetch` wrapper with Bearer token, used for all authenticated data endpoints (accounts, statements, analysis, budgets, transactions, export).
+2. **Axios** — Used for auth endpoints (login, register, OAuth, refresh, logout) that rely on httpOnly cookies.
+
+Both automatically retry on 401 by refreshing the access token.

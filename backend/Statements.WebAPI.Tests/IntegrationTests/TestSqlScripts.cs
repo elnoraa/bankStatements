@@ -125,6 +125,17 @@ internal static class TestSqlScripts
         );
 
         CREATE INDEX idx_external_logins_user_id ON external_logins(user_id);
+
+        CREATE TABLE budgets (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
+            category_id UUID NOT NULL REFERENCES transaction_categories(id) ON DELETE CASCADE,
+            month_year DATE NOT NULL,
+            amount NUMERIC(14, 2) NOT NULL CHECK (amount > 0),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            UNIQUE(user_id, category_id, month_year)
+        );
         """;
 
     /// <summary>

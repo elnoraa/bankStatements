@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Statements.WebAPI.Contracts.Analysis;
 using Statements.WebAPI.Services.Analysis;
+using Statements.WebAPI.Services.Export;
 
 namespace Statements.WebAPI.Controllers.v1;
 
@@ -13,30 +14,25 @@ namespace Statements.WebAPI.Controllers.v1;
 public sealed class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
+    private readonly ITransactionService _transactionService;
+    private readonly ICsvExportService _csvExportService;
     private readonly ILogger<AnalysisController> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="AnalysisController"/> class.
-    /// </summary>
-    /// <param name="analysisService">Service for spending analysis operations.</param>
-    /// <param name="logger">Logger instance.</param>
-    public AnalysisController(IAnalysisService analysisService, ILogger<AnalysisController> logger)
+    public AnalysisController(
+        IAnalysisService analysisService,
+        ITransactionService transactionService,
+        ICsvExportService csvExportService,
+        ILogger<AnalysisController> logger)
     {
         _analysisService = analysisService;
+        _transactionService = transactionService;
+        _csvExportService = csvExportService;
         _logger = logger;
     }
 
     /// <summary>
     /// Gets a spending summary with category breakdown and recent transactions.
     /// </summary>
-    /// <param name="bankAccountId">Optional bank account ID to filter by.</param>
-    /// <param name="from">Optional start date for the analysis period.</param>
-    /// <param name="to">Optional end date for the analysis period.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>A <see cref="SpendingSummaryResponse"/> with aggregated spending data.</returns>
-    /// <response code="200">Summary retrieved successfully.</response>
-    /// <response code="400">Invalid date range (from &gt; to).</response>
-    /// <response code="401">User not authenticated.</response>
     [HttpGet("summary")]
     public async Task<ActionResult<SpendingSummaryResponse>> GetSummary(
         [FromQuery] Guid? bankAccountId,
@@ -76,9 +72,37 @@ public sealed class AnalysisController : ControllerBase
     }
 
     /// <summary>
-    /// Extracts the current user's ID from the JWT claims in the authorization header.
+    /// Returns all available transaction categories for editing transactions.
     /// </summary>
-    /// <returns>The user's <see cref="Guid"/> if found and valid; otherwise <c>null</c>.</returns>
+    [HttpGet("categories")]
+    public async Task<ActionResult<IReadOnlyList<CategoryResponse>>> GetCategories(CancellationToken cancellationToken)
+    {
+        var categories = await _transactionService.GetCategoriesAsync(cancellationToken);
+        return Ok(categories);
+    }
+
+    /// <summary>
+    /// Downloads transactions as a CSV file for the current user and filters.
+    /// </summary>
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        var csvBytes = await _csvExportService.ExportTransactionsAsync(
+            userId.Value, bankAccountId, from, to, cancellationToken);
+
+        return File(csvBytes, "text/csv", $"transactions-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
     private Guid? GetCurrentUserId()
     {
         var subject = User.FindFirstValue(JwtRegisteredClaimNames.Sub)

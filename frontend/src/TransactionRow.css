@@ -1,0 +1,75 @@
+.transaction-row {
+  cursor: default;
+}
+
+.transaction-row.editing {
+  background: #ffffff;
+  border: 1px solid #d0d8e3;
+  flex-direction: column;
+  gap: 8px;
+  cursor: default;
+}
+
+.transaction-edit-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.transaction-edit-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.transaction-edit-select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  background: #fff;
+  box-sizing: border-box;
+}
+
+.transaction-edit-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.transaction-save-btn {
+  background: #245f73;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.transaction-save-btn:hover {
+  background: #1a4a5c;
+}
+
+.transaction-cancel-btn {
+  background: #eef3f7;
+  color: #253247;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.transaction-cancel-btn:hover {
+  background: #dce3eb;
+}

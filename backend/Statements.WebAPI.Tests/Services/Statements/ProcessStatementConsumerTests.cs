@@ -1,11 +1,13 @@
 using System.Dynamic;
 using Dapper;
 using FluentAssertions;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Statements.WebAPI.Contracts.Messages;
 using Statements.WebAPI.Data;
+using Statements.WebAPI.Hubs;
 using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Services.Statements;
@@ -18,6 +20,7 @@ public sealed class ProcessStatementConsumerTests
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
     private readonly Mock<IStatementParser> _parserMock = new();
     private readonly IConfiguration _configuration;
+    private readonly Mock<IHubContext<StatementProcessingHub>> _hubContextMock = new();
     private readonly Mock<ILogger<ProcessStatementConsumer>> _loggerMock = new();
     private readonly ProcessStatementConsumer _sut;
 
@@ -34,6 +37,7 @@ public sealed class ProcessStatementConsumerTests
             _dbExecutorMock.Object,
             _parserMock.Object,
             _configuration,
+            _hubContextMock.Object,
             _loggerMock.Object);
     }
 

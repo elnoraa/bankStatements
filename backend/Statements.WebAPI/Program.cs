@@ -8,10 +8,12 @@ using Scalar.AspNetCore;
 using Serilog;
 using Statements.WebAPI.Auth;
 using Statements.WebAPI.Data;
+using Statements.WebAPI.Hubs;
 using Statements.WebAPI.Services.Analysis;
 using Statements.WebAPI.Services.Auth;
 using Statements.WebAPI.Services.BankAccounts;
 using Statements.WebAPI.Services.Messaging;
+using Statements.WebAPI.Services.Export;
 using Statements.WebAPI.Services.Statements;
 
 // Register Dapper type handlers for DateOnly (required for Npgsql compatibility)
@@ -45,6 +47,7 @@ var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? ne
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("Frontend", policy =>
@@ -118,6 +121,9 @@ builder.Services.AddHttpClient("external-auth");
 builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
+builder.Services.AddScoped<ITransactionService, TransactionService>();
+builder.Services.AddScoped<IBudgetService, BudgetService>();
+builder.Services.AddScoped<ICsvExportService, CsvExportService>();
 builder.Services.AddTransient<IStatementParser, PdfStatementParser>();
 builder.Services.Configure<ClamAvOptions>(builder.Configuration.GetSection(ClamAvOptions.SectionName));
 builder.Services.AddSingleton<IVirusScanService, ClamAvVirusScanService>();
@@ -139,6 +145,21 @@ builder.Services
             ValidIssuer = jwtOptions.Issuer,
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Secret))
+        };
+
+        // Allow SignalR to receive the access token via query string (WebSocket doesn't support headers)
+        options.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"];
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
         };
     });
 builder.Services.AddAuthorization();
@@ -175,7 +196,7 @@ app.Use(async (context, next) =>
         "style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' data:; " +
         "font-src 'self'; " +
-        "connect-src 'self'; " +
+        "connect-src 'self' ws: wss:; " +
         "frame-ancestors 'none'");
 
     // HSTS (only when HTTPS is used)
@@ -209,6 +230,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<StatementProcessingHub>("/hubs/statement-processing");
 
 app.Run();
 

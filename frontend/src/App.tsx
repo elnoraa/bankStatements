@@ -1,82 +1,17 @@
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import './App.css';
-import { ExternalLoginButtons } from './components/ExternalLoginButtons';
 import { refreshAuthToken, logout as apiLogout } from './services/externalAuth';
-
-/** Authentication mode — either login or registration. */
-type AuthMode = 'login' | 'register';
-
-/** Authenticated user profile returned from the API. */
-type AuthUser = {
-  id: string;
-  email: string;
-  displayName: string;
-  emailVerified: boolean;
-};
-
-/** Auth response containing access token, expiry, and user info. */
-type AuthResponse = {
-  accessToken: string;
-  accessTokenExpiresAt: string;
-  user: AuthUser;
-};
-
-/** A bank account belonging to the user. */
-type BankAccount = {
-  id: string;
-  userId: string;
-  bankName: string;
-  accountName: string;
-  accountMask: string | null;
-  currency: string;
-  createdAt: string;
-  updatedAt: string;
-};
-
-/** Response after uploading a bank statement. */
-type StatementUploadResponse = {
-  id: string;
-  originalFileName: string;
-  storedFileName: string;
-  status: string;
-  uploadedAt: string;
-  parsedTransactionCount: number;
-  processedAt?: string | null;
-  errorMessage?: string | null;
-};
-
-/** Spending aggregated by category. */
-type CategorySpending = {
-  category: string;
-  totalDebit: number;
-  transactionCount: number;
-};
-
-/** A single recent transaction. */
-type RecentTransaction = {
-  id: string;
-  transactionDate: string;
-  description: string;
-  amount: number;
-  transactionType: 'credit' | 'debit';
-  category?: string | null;
-};
-
-/** Spending analysis summary for a period. */
-type SpendingSummary = {
-  periodStart?: string | null;
-  periodEnd?: string | null;
-  totalCredit: number;
-  totalDebit: number;
-  netCashflow: number;
-  isCashflowPositive: boolean;
-  spendingByCategory: CategorySpending[];
-  recentTransactions: RecentTransaction[];
-};
-
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5213';
-
-const TOTAL_ID = '__total__';
+import { AuthPanel } from './components/AuthPanel';
+import { AccountToolbar } from './components/AccountToolbar';
+import { UploadPanel } from './components/UploadPanel';
+import { MetricStrip } from './components/MetricStrip';
+import { SpendingBreakdown } from './components/SpendingBreakdown';
+import { RecentActivity } from './components/RecentActivity';
+import { StatementManager } from './components/StatementManager';
+import { BudgetManager } from './components/BudgetManager';
+import { useStatementHub, type StatementStatusUpdate } from './hooks/useStatementHub';
+import type { AuthMode, AuthResponse, BankAccount, StatementUploadResponse, SpendingSummary } from './types';
+import { apiBaseUrl, TOTAL_ID } from './types';
 
 /** Main application component with auth flow, account management, statement upload, and spending analysis. */
 function App() {
@@ -103,12 +38,21 @@ function App() {
   const [statementStatus, setStatementStatus] = useState<string | null>(null);
   const [parsedTransactionCount, setParsedTransactionCount] = useState(0);
 
+  // Category options for transaction editing
+  const [categories, setCategories] = useState<{ id: string; name: string; transactionType: string }[]>([]);
+
+  // Budget progress state
+  const [budgetProgress, setBudgetProgress] = useState<{ categoryName: string; budgetAmount: number; actualSpending: number; remaining: number; isOverBudget: boolean; percentageUsed: number }[]>([]);
+
   // Analysis state
   const [summary, setSummary] = useState<SpendingSummary | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isUploadLoading, setIsUploadLoading] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [appMessage, setAppMessage] = useState('');
+
+  // SignalR state: becomes true when hub connection is established
+  const [signalRReady, setSignalRReady] = useState(false);
 
   // Track current access token for API calls (stored in memory only — never localStorage)
   const accessTokenRef = useRef<string | null>(null);
@@ -145,6 +89,8 @@ function App() {
     if (auth) {
       accessTokenRef.current = auth.accessToken;
       void loadAccounts(auth.accessToken);
+      void loadCategories();
+      void loadBudgetProgress();
       void loadSummary(auth.accessToken);
     } else {
       accessTokenRef.current = null;
@@ -168,7 +114,6 @@ function App() {
       const fetched: BankAccount[] = await response.json();
       setAccounts(fetched);
 
-      // If selected account is still TOTAL_ID, keep it; otherwise ensure it still exists
       setSelectedAccountId((prev) => {
         if (prev === TOTAL_ID) return TOTAL_ID;
         if (fetched.some((a) => a.id === prev)) return prev;
@@ -255,7 +200,7 @@ function App() {
   /**
    * Handles authentication form submission (login or register).
    */
-  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleAuthSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsAuthLoading(true);
     setAuthMessage('');
@@ -328,7 +273,7 @@ function App() {
   }, []);
 
   /** Handles statement file upload form submission. */
-  async function handleUpload(event: FormEvent<HTMLFormElement>) {
+  async function handleUpload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!auth || !selectedFile || selectedAccountId === TOTAL_ID) return;
 
@@ -361,9 +306,9 @@ function App() {
     }
   }
 
-  // Poll for statement processing status after upload
+  // Poll for statement processing status after upload (fallback when SignalR is not connected)
   useEffect(() => {
-    if (!pendingStatementId) return;
+    if (!pendingStatementId || signalRReady) return;
 
     const poll = async () => {
       try {
@@ -422,11 +367,82 @@ function App() {
       }
 
       setSummary(await response.json() as SpendingSummary);
+      void loadBudgetProgress();
     } catch (error) {
       setAppMessage(error instanceof Error ? error.message : 'Could not load analysis.');
     } finally {
       setIsSummaryLoading(false);
     }
+  }
+
+  /** Loads budget progress for the current month and account. */
+  async function loadBudgetProgress() {
+    const now = new Date();
+    const params = new URLSearchParams({ year: now.getFullYear().toString(), month: String(now.getMonth() + 1) });
+    if (selectedAccountId !== TOTAL_ID) {
+      params.set('bankAccountId', selectedAccountId);
+    }
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/budgets/progress?${params.toString()}`);
+      if (!response.ok) return;
+      setBudgetProgress(await response.json());
+    } catch {
+      // Non-critical
+    }
+  }
+
+  /** Loads available categories for transaction editing. */
+  async function loadCategories() {
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/analysis/categories`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setCategories(data);
+    } catch {
+      // Categories are non-critical; silently fail
+    }
+  }
+
+  /** Downloads transactions as CSV for the current filters. */
+  async function handleDownloadCsv() {
+    const token = accessTokenRef.current;
+    if (!token) return;
+
+    const params = new URLSearchParams();
+    if (selectedAccountId !== TOTAL_ID) {
+      params.set('bankAccountId', selectedAccountId);
+    }
+
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/v1/analysis/export?${params.toString()}`,
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      if (!response.ok) return;
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `transactions-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Silently fail
+    }
+  }
+
+  /** Updates local state after a transaction edit succeeds. */
+  function handleTransactionUpdated(id: string, updates: Record<string, unknown>) {
+    setSummary((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        recentTransactions: prev.recentTransactions.map((t) =>
+          t.id === id ? { ...t, ...updates } as typeof t : t
+        ),
+      };
+    });
   }
 
   /** Reload summary when selected account changes */
@@ -436,6 +452,28 @@ function App() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId, auth]);
+
+  // Handle real-time status updates from SignalR
+  const handleStatusUpdate = useCallback((update: StatementStatusUpdate) => {
+    setStatementStatus(update.status);
+    setParsedTransactionCount(update.parsedTransactionCount ?? 0);
+    setUpload((prev) => prev ? { ...prev, status: update.status, parsedTransactionCount: update.parsedTransactionCount ?? 0 } : prev);
+    setPendingStatementId(null);
+
+    if (update.status === 'processed') {
+      void loadSummary();
+    } else if (update.status === 'failed') {
+      setAppMessage(update.errorMessage ?? 'Statement processing failed.');
+    }
+  }, []);
+
+  // SignalR hub connection for real-time status updates
+  useStatementHub(
+    accessTokenRef.current,
+    handleStatusUpdate,
+    () => setSignalRReady(true),
+    () => setSignalRReady(false),
+  );
 
   /** Signs the user out. */
   async function signOut() {
@@ -474,66 +512,19 @@ function App() {
           </p>
         </section>
 
-        <section className="panel auth-panel" aria-label="Authentication">
-          <div className="segmented-control">
-            <button
-              className={authMode === 'login' ? 'active' : ''}
-              type="button"
-              onClick={() => setAuthMode('login')}
-            >
-              Login
-            </button>
-            <button
-              className={authMode === 'register' ? 'active' : ''}
-              type="button"
-              onClick={() => setAuthMode('register')}
-            >
-              Register
-            </button>
-          </div>
-
-          <form className="form-stack" onSubmit={handleAuthSubmit}>
-            {authMode === 'register' && (
-              <label>
-                Display name
-                <input
-                  value={displayName}
-                  onChange={(event) => setDisplayName(event.target.value)}
-                  maxLength={120}
-                />
-              </label>
-            )}
-            <label>
-              Email
-              <input
-                type="email"
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Password
-              <input
-                type="password"
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                minLength={8}
-                required
-              />
-            </label>
-            {authMessage && <p className="error-text">{authMessage}</p>}
-            <button className="primary-button" type="submit" disabled={isAuthLoading}>
-              {isAuthLoading ? 'Working...' : authMode === 'login' ? 'Login' : 'Create account'}
-            </button>
-          </form>
-
-          <div className="external-login-divider">
-            <span>or</span>
-          </div>
-
-          <ExternalLoginButtons />
-        </section>
+        <AuthPanel
+          authMode={authMode}
+          setAuthMode={setAuthMode}
+          displayName={displayName}
+          setDisplayName={setDisplayName}
+          email={email}
+          setEmail={setEmail}
+          password={password}
+          setPassword={setPassword}
+          authMessage={authMessage}
+          isAuthLoading={isAuthLoading}
+          handleAuthSubmit={handleAuthSubmit}
+        />
       </main>
     );
   }
@@ -554,207 +545,70 @@ function App() {
         </button>
       </header>
 
-      {/* Account toolbar */}
-      <div className="account-bar">
-        <label className="account-bar-label">Account:</label>
-        <div className="account-select-wrapper">
-          <select
-            className="account-select"
-            value={selectedAccountId}
-            onChange={(e) => setSelectedAccountId(e.target.value)}
-          >
-            <option value={TOTAL_ID}>Total (all accounts)</option>
-            {accounts.length > 0 && <option disabled>──────────</option>}
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.accountName}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="account-list">
-          {accounts.map((account) => (
-            <div className="account-item" key={account.id}>
-              {editingAccountId === account.id ? (
-                <input
-                  ref={editInputRef}
-                  className="account-name-edit"
-                  value={editingAccountName}
-                  onChange={(e) => setEditingAccountName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') void handleSaveRename(account.id);
-                    if (e.key === 'Escape') cancelRename();
-                  }}
-                  onBlur={() => void handleSaveRename(account.id)}
-                  maxLength={120}
-                />
-              ) : (
-                <>
-                  <span
-                    className="account-name-clickable"
-                    onClick={() => handleStartRename(account)}
-                    title="Click to rename"
-                  >
-                    {account.accountName}
-                  </span>
-                  <div className="account-actions">
-                    <button
-                      className="account-action-btn"
-                      type="button"
-                      title="Rename"
-                      onClick={() => handleStartRename(account)}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      className="account-action-btn account-action-delete"
-                      type="button"
-                      title="Delete account and all its statements"
-                      onClick={() => {
-                        if (window.confirm(`Delete "${account.accountName}" and all its statements?`)) {
-                          void handleDeleteAccount(account.id);
-                        }
-                      }}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-        <button
-          className="account-add-btn"
-          type="button"
-          onClick={() => void handleAddAccount()}
-          disabled={isAccountsLoading}
-          title="Add account"
-        >
-          + Add account
-        </button>
-        {accountsMessage && <p className="error-text account-message">{accountsMessage}</p>}
-      </div>
+      <AccountToolbar
+        accounts={accounts}
+        selectedAccountId={selectedAccountId}
+        setSelectedAccountId={setSelectedAccountId}
+        editingAccountId={editingAccountId}
+        editingAccountName={editingAccountName}
+        setEditingAccountName={setEditingAccountName}
+        editInputRef={editInputRef}
+        handleStartRename={handleStartRename}
+        handleSaveRename={handleSaveRename}
+        cancelRename={cancelRename}
+        handleDeleteAccount={handleDeleteAccount}
+        handleAddAccount={handleAddAccount}
+        isAccountsLoading={isAccountsLoading}
+        accountsMessage={accountsMessage}
+      />
 
       <section className="dashboard-grid">
-        <form className="panel upload-panel" onSubmit={handleUpload}>
-          <div>
-            <p className="panel-label">PDF upload</p>
-            <h2>Parse a bank statement</h2>
-          </div>
+        <UploadPanel
+          selectedAccountId={selectedAccountId}
+          selectedFile={selectedFile}
+          setSelectedFile={setSelectedFile}
+          isUploadLoading={isUploadLoading}
+          handleUpload={handleUpload}
+          upload={upload}
+          statementStatus={statementStatus}
+          parsedTransactionCount={parsedTransactionCount}
+          appMessage={appMessage}
+          selectedAccountName={selectedAccount?.accountName ?? null}
+        />
 
-          {selectedAccountId === TOTAL_ID ? (
-            <p className="empty-state upload-hint">
-              Select a specific account above to upload a statement.
-            </p>
-          ) : (
-            <>
-              <p className="upload-context">
-                Uploading to: <strong>{selectedAccount?.accountName ?? 'Unknown'}</strong>
-              </p>
-              <label className="file-input">
-                <span>{selectedFile ? selectedFile.name : 'Choose a PDF statement'}</span>
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf"
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                />
-              </label>
-              <button
-                className="primary-button"
-                type="submit"
-                disabled={!selectedFile || isUploadLoading}
-              >
-                {isUploadLoading ? 'Uploading...' : 'Upload and analyse'}
-              </button>
-            </>
-          )}
-
-          {upload && (
-            <p className={statementStatus === 'failed' ? 'error-text' : 'success-text'}>
-              {statementStatus === 'uploaded' && `${upload.originalFileName} uploaded — processing...`}
-              {statementStatus === 'processing' && `${upload.originalFileName} processing...`}
-              {statementStatus === 'processed' && `${upload.originalFileName} processed with ${parsedTransactionCount} transactions.`}
-              {statementStatus === 'failed' && `${upload.originalFileName} processing failed.`}
-            </p>
-          )}
-          {appMessage && <p className="error-text">{appMessage}</p>}
-        </form>
-
-        <section className="metric-strip">
-          <article className="metric">
-            <span>Total credit</span>
-            <strong>{currency.format(summary?.totalCredit ?? 0)}</strong>
-          </article>
-          <article className="metric">
-            <span>Total debit</span>
-            <strong>{currency.format(summary?.totalDebit ?? 0)}</strong>
-          </article>
-          <article className={summary?.isCashflowPositive ? 'metric positive' : 'metric negative'}>
-            <span>Net cashflow</span>
-            <strong>{currency.format(summary?.netCashflow ?? 0)}</strong>
-          </article>
-        </section>
+        <MetricStrip summary={summary} currency={currency} />
       </section>
 
       <section className="content-grid">
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="panel-label">Categories</p>
-              <h2>Spending breakdown</h2>
-            </div>
-            <button className="secondary-button" type="button" onClick={() => void loadSummary()} disabled={isSummaryLoading}>
-              Refresh
-            </button>
-          </div>
-          <div className="category-list">
-            {(summary?.spendingByCategory.length ?? 0) === 0 && (
-              <p className="empty-state">Upload a PDF statement to see category totals.</p>
-            )}
-            {summary?.spendingByCategory.map((category) => (
-              <div className="category-row" key={category.category}>
-                <div>
-                  <strong>{category.category}</strong>
-                  <span>{category.transactionCount} transactions</span>
-                </div>
-                <b>{currency.format(category.totalDebit)}</b>
-              </div>
-            ))}
-          </div>
-        </section>
+        <SpendingBreakdown
+          summary={summary}
+          loadSummary={loadSummary}
+          isSummaryLoading={isSummaryLoading}
+          currency={currency}
+          budgetProgress={budgetProgress}
+        />
 
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="panel-label">Transactions</p>
-              <h2>Recent activity</h2>
-            </div>
-            <span className="date-range">
-              {summary?.periodStart && summary?.periodEnd
-                ? `${summary.periodStart} to ${summary.periodEnd}`
-                : 'No period yet'}
-            </span>
-          </div>
-          <div className="transaction-list">
-            {(summary?.recentTransactions.length ?? 0) === 0 && (
-              <p className="empty-state">Parsed transactions will appear here.</p>
-            )}
-            {summary?.recentTransactions.map((transaction) => (
-              <div className="transaction-row" key={transaction.id}>
-                <div>
-                  <strong>{transaction.description}</strong>
-                  <span>{transaction.transactionDate} | {transaction.category ?? 'Uncategorised'}</span>
-                </div>
-                <b className={transaction.transactionType}>
-                  {transaction.transactionType === 'credit' ? '+' : '-'}
-                  {currency.format(transaction.amount)}
-                </b>
-              </div>
-            ))}
-          </div>
-        </section>
+        <RecentActivity
+          summary={summary}
+          currency={currency}
+          categories={categories}
+          authedFetch={authedFetch}
+          onTransactionUpdated={handleTransactionUpdated}
+          headerActions={
+            <button className="secondary-button" type="button" onClick={() => void handleDownloadCsv()} title="Download as CSV">
+              Download CSV
+            </button>
+          }
+        />
       </section>
+
+      <StatementManager authedFetch={authedFetch} />
+
+      <BudgetManager
+        categories={categories}
+        authedFetch={authedFetch}
+        onBudgetsChanged={() => void loadBudgetProgress()}
+      />
     </main>
   );
 }

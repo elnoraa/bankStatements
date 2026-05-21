@@ -275,6 +275,79 @@ public sealed class StatementService : IStatementService
                 cancellationToken: cancellationToken));
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StatementListItemResponse>> ListAsync(
+        Guid userId, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var offset = (page - 1) * pageSize;
+        return (await _dbExecutor.QueryAsync<StatementListItemResponse>(
+            new CommandDefinition(
+                """
+                SELECT
+                    bs.id AS Id,
+                    bs.original_file_name AS OriginalFileName,
+                    bs.status AS Status,
+                    bs.uploaded_at AS UploadedAt,
+                    bs.processed_at AS ProcessedAt,
+                    bs.failed_at AS FailedAt,
+                    COALESCE(
+                        (SELECT COUNT(*)::int FROM statement_transactions st
+                         WHERE st.bank_statement_id = bs.id), 0
+                    ) AS ParsedTransactionCount,
+                    bs.size_in_bytes AS SizeInBytes,
+                    bs.error_message AS ErrorMessage,
+                    bs.bank_account_id AS BankAccountId
+                FROM bank_statements bs
+                WHERE bs.user_id = @UserId
+                ORDER BY bs.uploaded_at DESC
+                LIMIT @PageSize OFFSET @Offset
+                """,
+                new { UserId = userId, PageSize = pageSize, Offset = offset },
+                cancellationToken: cancellationToken)))
+            .AsList();
+    }
+
+    /// <inheritdoc />
+    public async Task RetryAsync(Guid userId, Guid statementId, CancellationToken cancellationToken)
+    {
+        var statement = await _dbExecutor.QuerySingleOrDefaultAsync<dynamic>(
+            new CommandDefinition(
+                """
+                SELECT status, stored_file_name, bank_account_id
+                FROM bank_statements
+                WHERE id = @Id AND user_id = @UserId
+                """,
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        if (statement is null)
+            throw new InvalidOperationException("Statement not found.");
+        if (statement.status != "failed")
+            throw new InvalidOperationException("Only failed statements can be retried.");
+
+        await _dbExecutor.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE bank_statements
+                SET status = 'uploaded', error_message = NULL, failed_at = NULL
+                WHERE id = @Id AND user_id = @UserId
+                """,
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        await _messagePublisher.PublishAsync(new ProcessStatementMessage
+        {
+            StatementId = statementId,
+            StoredFileName = statement.stored_file_name,
+            UserId = userId,
+            BankAccountId = statement.bank_account_id
+        }, cancellationToken);
+
+        _logger.LogInformation(
+            "Statement {StatementId} queued for reprocessing by user {UserId}",
+            statementId, userId);
+    }
+
     private string GetUploadsDirectory()
     {
         var configuredDirectory = _configuration["FileStorage:UploadsDirectory"];

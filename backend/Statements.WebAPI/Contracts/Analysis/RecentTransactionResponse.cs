@@ -34,4 +34,10 @@ public sealed class RecentTransactionResponse
     /// The assigned spending category, if any.
     /// </summary>
     public string? Category { get; init; }
+
+    /// <summary>
+    /// The ID of the assigned category, if any.
+    /// Used by the frontend for category editing.
+    /// </summary>
+    public Guid? CategoryId { get; init; }
 }

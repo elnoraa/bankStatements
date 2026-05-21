@@ -1,0 +1,144 @@
+.budget-manager {
+  margin-top: 20px;
+}
+
+.budget-month-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.budget-month-picker select {
+  padding: 4px 8px;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  font-size: 13px;
+  background: #fff;
+}
+
+.budget-year-input {
+  width: 70px;
+  padding: 4px 8px;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.budget-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.budget-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  gap: 8px;
+}
+
+.budget-row-new {
+  opacity: 0.6;
+}
+
+.budget-row strong {
+  font-size: 13px;
+  color: #1f2a3d;
+  min-width: 120px;
+}
+
+.budget-row-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.budget-amount-input {
+  width: 100px;
+  padding: 4px 6px;
+  border: 1px solid #d0d8e3;
+  border-radius: 4px;
+  font-size: 13px;
+  text-align: right;
+}
+
+.budget-save-btn {
+  background: #245f73;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.budget-save-btn:hover {
+  background: #1a4a5c;
+}
+
+.budget-delete-btn {
+  background: transparent;
+  color: #a33b2b;
+  border: 1px solid #e8d0cc;
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.budget-delete-btn:hover {
+  background: #fff1f0;
+}
+
+/* Budget bar (in SpendingBreakdown) */
+.budget-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.budget-bar-track {
+  flex: 1;
+  height: 8px;
+  background: #e9eef4;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.budget-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  min-width: 0;
+}
+
+.budget-bar-fill.ok {
+  background: #16724f;
+}
+
+.budget-bar-fill.warning {
+  background: #d97706;
+}
+
+.budget-bar-fill.over {
+  background: #b42318;
+}
+
+.budget-remaining {
+  font-size: 11px;
+  color: #68758a;
+  white-space: nowrap;
+}
+
+.budget-over {
+  font-size: 11px;
+  color: #b42318;
+  font-weight: 700;
+  white-space: nowrap;
+}

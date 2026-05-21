@@ -1,3 +1,4 @@
+using System.Dynamic;
 using Dapper;
 using FluentAssertions;
 using Microsoft.AspNetCore.Http;
@@ -56,6 +57,20 @@ public sealed class StatementServiceTests
     /// <param name="fileName">The file name (default: "statement.pdf").</param>
     /// <param name="size">The file size in bytes (default: 1024).</param>
     /// <returns>A configured mock <see cref="IFormFile"/>.</returns>
+    /// <summary>
+    /// Creates an ExpandoObject for mocking Dapper's dynamic queries.
+    /// </summary>
+    private static dynamic CreateDynamicRow(params (string Key, object Value)[] properties)
+    {
+        var expando = new ExpandoObject();
+        var dict = (IDictionary<string, object?>)expando;
+        foreach (var (key, value) in properties)
+        {
+            dict[key] = value;
+        }
+        return expando;
+    }
+
     private static Mock<IFormFile> CreateMockPdfFile(string fileName = "statement.pdf", long size = 1024)
     {
         var fileMock = new Mock<IFormFile>();
@@ -281,5 +296,91 @@ public sealed class StatementServiceTests
         var result = await _sut.GetStatementAsync(_userId, Guid.NewGuid(), CancellationToken.None);
 
         result.Should().BeNull();
+    }
+
+    /// <summary>
+    /// Verifies that ListAsync returns a list of statements.
+    /// </summary>
+    [Fact]
+    public async Task ListAsync_ReturnsStatementList()
+    {
+        var list = new List<StatementListItemResponse>
+        {
+            new() { Id = Guid.NewGuid(), OriginalFileName = "test.pdf", Status = "processed", UploadedAt = DateTimeOffset.UtcNow, BankAccountId = _bankAccountId }
+        };
+
+        _dbExecutorMock
+            .Setup(x => x.QueryAsync<StatementListItemResponse>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(list);
+
+        var result = await _sut.ListAsync(_userId, 1, 20, CancellationToken.None);
+
+        result.Should().HaveCount(1);
+        result[0].Status.Should().Be("processed");
+    }
+
+    /// <summary>
+    /// Verifies that RetryAsync on a failed statement publishes a message and resets the status.
+    /// </summary>
+    [Fact]
+    public async Task RetryAsync_WithFailedStatement_PublishesMessage()
+    {
+        var statementId = Guid.NewGuid();
+
+        // Get statement mock — returns dynamic with status='failed'
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleOrDefaultAsync<dynamic>(It.IsAny<CommandDefinition>()))
+            .Returns(Task.FromResult<dynamic?>(CreateDynamicRow(
+                ("status", "failed"),
+                ("stored_file_name", "test-file.pdf"),
+                ("bank_account_id", _bankAccountId))));
+
+        // Update + publish
+        _dbExecutorMock
+            .Setup(x => x.ExecuteAsync(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(1);
+
+        await _sut.RetryAsync(_userId, statementId, CancellationToken.None);
+
+        _messagePublisherMock.Verify(
+            x => x.PublishAsync(It.IsAny<ProcessStatementMessage>(), It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that RetryAsync on a non-failed statement throws.
+    /// </summary>
+    [Fact]
+    public async Task RetryAsync_WithNonFailedStatement_Throws()
+    {
+        var statementId = Guid.NewGuid();
+
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleOrDefaultAsync<dynamic>(It.IsAny<CommandDefinition>()))
+            .Returns(Task.FromResult<dynamic?>(CreateDynamicRow(
+                ("status", "processing"),
+                ("stored_file_name", "test-file.pdf"),
+                ("bank_account_id", _bankAccountId))));
+
+        var act = () => _sut.RetryAsync(_userId, statementId, CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*failed*");
+    }
+
+    /// <summary>
+    /// Verifies that RetryAsync on a non-existent statement throws.
+    /// </summary>
+    [Fact]
+    public async Task RetryAsync_WithNonExistentStatement_Throws()
+    {
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleOrDefaultAsync<dynamic>(It.IsAny<CommandDefinition>()))
+            .Returns(Task.FromResult<dynamic?>((object?)null));
+
+        var act = () => _sut.RetryAsync(_userId, Guid.NewGuid(), CancellationToken.None);
+
+        await act.Should().ThrowAsync<InvalidOperationException>()
+            .WithMessage("*not found*");
     }
 }

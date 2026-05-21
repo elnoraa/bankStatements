@@ -8,6 +8,7 @@ using Moq;
 using Statements.WebAPI.Contracts.Analysis;
 using Statements.WebAPI.Controllers.v1;
 using Statements.WebAPI.Services.Analysis;
+using Statements.WebAPI.Services.Export;
 
 namespace Statements.WebAPI.Tests.Controllers;
 
@@ -17,6 +18,8 @@ namespace Statements.WebAPI.Tests.Controllers;
 public sealed class AnalysisControllerTests
 {
     private readonly Mock<IAnalysisService> _analysisServiceMock = new();
+    private readonly Mock<ITransactionService> _transactionServiceMock = new();
+    private readonly Mock<ICsvExportService> _csvExportServiceMock = new();
     private readonly AnalysisController _sut;
     private readonly Guid _userId = Guid.NewGuid();
 
@@ -27,6 +30,8 @@ public sealed class AnalysisControllerTests
     {
         _sut = new AnalysisController(
             _analysisServiceMock.Object,
+            _transactionServiceMock.Object,
+            _csvExportServiceMock.Object,
             Mock.Of<ILogger<AnalysisController>>());
     }
 
@@ -131,5 +136,49 @@ public sealed class AnalysisControllerTests
         var result = await _sut.GetSummary(bankAccountId, from, to, CancellationToken.None);
 
         result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    // --- GET /api/v1/analysis/categories tests ---
+
+    [Fact]
+    public async Task GetCategories_ReturnsOk()
+    {
+        SetupUserIdentity();
+
+        _transactionServiceMock
+            .Setup(x => x.GetCategoriesAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<CategoryResponse>());
+
+        var result = await _sut.GetCategories(CancellationToken.None);
+
+        result.Result.Should().BeOfType<OkObjectResult>();
+    }
+
+    // --- GET /api/v1/analysis/export tests ---
+
+    [Fact]
+    public async Task Export_WithValidUser_ReturnsFile()
+    {
+        SetupUserIdentity();
+
+        _csvExportServiceMock
+            .Setup(x => x.ExportTransactionsAsync(_userId, null, null, null, It.IsAny<CancellationToken>()))
+            .ReturnsAsync("Date,Amount\n2026-01-01,100"u8.ToArray());
+
+        var result = await _sut.Export(null, null, null, CancellationToken.None);
+
+        var fileResult = result.Should().BeOfType<FileContentResult>().Subject;
+        fileResult.ContentType.Should().Be("text/csv");
+        fileResult.FileDownloadName.Should().Contain(".csv");
+    }
+
+    [Fact]
+    public async Task Export_WithoutAuth_ReturnsUnauthorized()
+    {
+        SetupNoUserIdentity();
+
+        var result = await _sut.Export(null, null, null, CancellationToken.None);
+
+        result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 }

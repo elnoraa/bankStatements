@@ -10,7 +10,12 @@ namespace Statements.WebAPI.Tests.IntegrationTests;
 /// </summary>
 internal sealed class DateOnlyTypeHandler : SqlMapper.TypeHandler<DateOnly>
 {
-    public override DateOnly Parse(object value) => DateOnly.FromDateTime((DateTime)value);
+    public override DateOnly Parse(object value)
+    {
+        if (value is DateOnly dateOnly)
+            return dateOnly;
+        return DateOnly.FromDateTime((DateTime)value);
+    }
 
     public override void SetValue(IDbDataParameter parameter, DateOnly value)
     {
@@ -28,6 +33,8 @@ internal sealed class NullableDateOnlyTypeHandler : SqlMapper.TypeHandler<DateOn
     {
         if (value is null || value == DBNull.Value)
             return null;
+        if (value is DateOnly dateOnly)
+            return dateOnly;
         return DateOnly.FromDateTime((DateTime)value);
     }
 

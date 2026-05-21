@@ -117,6 +117,57 @@ public sealed class StatementsController : ControllerBase
     }
 
     /// <summary>
+    /// Lists all statements for the current user, ordered by most recent upload first.
+    /// </summary>
+    /// <param name="page">Page number (1-based, default 1).</param>
+    /// <param name="pageSize">Items per page (default 20).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of statement summaries.</returns>
+    [HttpGet]
+    public async Task<ActionResult<IReadOnlyList<StatementListItemResponse>>> List(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        var statements = await _statementService.ListAsync(userId.Value, page, pageSize, cancellationToken);
+        return Ok(statements);
+    }
+
+    /// <summary>
+    /// Retries processing a failed statement by re-queuing it for background processing.
+    /// </summary>
+    /// <param name="statementId">The ID of the failed statement.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with a confirmation message, or 400 if the statement cannot be retried.</returns>
+    [HttpPost("{statementId}/retry")]
+    public async Task<ActionResult> Retry(Guid statementId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        try
+        {
+            await _statementService.RetryAsync(userId.Value, statementId, cancellationToken);
+            _logger.LogInformation("Statement {StatementId} retry queued by user {UserId}", statementId, userId);
+            return Ok(new { message = "Statement queued for reprocessing." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Statement retry failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
     /// Extracts the current user's ID from the JWT claims in the authorization header.
     /// </summary>
     /// <returns>The user's <see cref="Guid"/> if found and valid; otherwise <c>null</c>.</returns>

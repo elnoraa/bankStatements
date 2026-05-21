@@ -34,4 +34,31 @@ public interface IStatementService
         Guid userId,
         Guid statementId,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Lists all statements for a user, ordered by most recent upload first.
+    /// </summary>
+    /// <param name="userId">The ID of the user.</param>
+    /// <param name="page">Page number (1-based).</param>
+    /// <param name="pageSize">Number of items per page.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of statement summaries.</returns>
+    Task<IReadOnlyList<StatementListItemResponse>> ListAsync(
+        Guid userId,
+        int page,
+        int pageSize,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Retries processing a failed statement by resetting its status and
+    /// re-publishing a processing message to the queue.
+    /// </summary>
+    /// <param name="userId">The ID of the owning user.</param>
+    /// <param name="statementId">The statement ID to retry.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the statement is not in a failed state or not found.</exception>
+    Task RetryAsync(
+        Guid userId,
+        Guid statementId,
+        CancellationToken cancellationToken);
 }

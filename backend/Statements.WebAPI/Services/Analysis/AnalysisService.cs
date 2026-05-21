@@ -90,7 +90,8 @@ public sealed class AnalysisService : IAnalysisService
                     t.description AS Description,
                     t.amount AS Amount,
                     t.transaction_type AS TransactionType,
-                    c.name AS Category
+                    c.name AS Category,
+                    c.id AS CategoryId
                 FROM statement_transactions t
                 JOIN bank_statements s ON s.id = t.bank_statement_id
                 LEFT JOIN transaction_categories c ON c.id = t.category_id

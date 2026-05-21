@@ -1,6 +1,8 @@
 using Dapper;
+using Microsoft.AspNetCore.SignalR;
 using Statements.WebAPI.Contracts.Messages;
 using Statements.WebAPI.Data;
+using Statements.WebAPI.Hubs;
 
 namespace Statements.WebAPI.Services.Statements;
 
@@ -13,17 +15,20 @@ public sealed class ProcessStatementConsumer
     private readonly IDbExecutor _dbExecutor;
     private readonly IStatementParser _statementParser;
     private readonly IConfiguration _configuration;
+    private readonly IHubContext<StatementProcessingHub> _hubContext;
     private readonly ILogger<ProcessStatementConsumer> _logger;
 
     public ProcessStatementConsumer(
         IDbExecutor dbExecutor,
         IStatementParser statementParser,
         IConfiguration configuration,
+        IHubContext<StatementProcessingHub> hubContext,
         ILogger<ProcessStatementConsumer> logger)
     {
         _dbExecutor = dbExecutor;
         _statementParser = statementParser;
         _configuration = configuration;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -90,7 +95,7 @@ public sealed class ProcessStatementConsumer
         catch (Exception ex)
         {
             _logger.LogError(ex, "PDF parsing failed for statement {StatementId}", message.StatementId);
-            await MarkFailedAsync(message.StatementId, $"PDF parsing failed: {ex.Message}");
+            await MarkFailedAsync(message.UserId, message.StatementId, $"PDF parsing failed: {ex.Message}");
             throw;
         }
 
@@ -135,7 +140,7 @@ public sealed class ProcessStatementConsumer
             _logger.LogError(ex,
                 "Transaction insertion failed for statement {StatementId}",
                 message.StatementId);
-            await MarkFailedAsync(message.StatementId, $"Transaction insertion failed: {ex.Message}");
+            await MarkFailedAsync(message.UserId, message.StatementId, $"Transaction insertion failed: {ex.Message}");
             throw;
         }
 
@@ -165,9 +170,32 @@ public sealed class ProcessStatementConsumer
         _logger.LogInformation(
             "Statement {StatementId} processed successfully with {Count} transactions",
             message.StatementId, transactions.Count);
+
+        // Notify connected clients via SignalR
+        await NotifyStatusAsync(message.UserId, message.StatementId, "processed", transactions.Count, null);
     }
 
-    private async Task MarkFailedAsync(Guid statementId, string errorMessage)
+    private async Task NotifyStatusAsync(Guid userId, Guid statementId, string status, int transactionCount, string? errorMessage)
+    {
+        try
+        {
+            await _hubContext.Clients.User(userId.ToString()).SendAsync(
+                "StatementStatusUpdated",
+                new
+                {
+                    StatementId = statementId,
+                    Status = status,
+                    ParsedTransactionCount = transactionCount,
+                    ErrorMessage = errorMessage
+                });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send SignalR notification for statement {StatementId}", statementId);
+        }
+    }
+
+    private async Task MarkFailedAsync(Guid userId, Guid statementId, string errorMessage)
     {
         try
         {
@@ -189,5 +217,7 @@ public sealed class ProcessStatementConsumer
                 "Failed to mark statement {StatementId} as failed (best-effort)",
                 statementId);
         }
+
+        await NotifyStatusAsync(userId, statementId, "failed", 0, errorMessage);
     }
 }
