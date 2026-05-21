@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
+using Statements.WebAPI.Contracts.Messages;
 using Statements.WebAPI.Contracts.Statements;
 using Statements.WebAPI.Data;
+using Statements.WebAPI.Services.Messaging;
 using Statements.WebAPI.Services.Statements;
 
 namespace Statements.WebAPI.Tests.Services.Statements;
@@ -16,8 +18,8 @@ namespace Statements.WebAPI.Tests.Services.Statements;
 public sealed class StatementServiceTests
 {
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
-    private readonly Mock<IStatementParser> _statementParserMock = new();
     private readonly Mock<IVirusScanService> _virusScanServiceMock = new();
+    private readonly Mock<IMessagePublisher> _messagePublisherMock = new();
     private readonly Mock<IWebHostEnvironment> _environmentMock = new();
     private readonly IConfiguration _configuration;
     private readonly StatementService _sut;
@@ -41,8 +43,8 @@ public sealed class StatementServiceTests
 
         _sut = new StatementService(
             _dbExecutorMock.Object,
-            _statementParserMock.Object,
             _virusScanServiceMock.Object,
+            _messagePublisherMock.Object,
             _environmentMock.Object,
             _configuration,
             Mock.Of<ILogger<StatementService>>());
@@ -150,10 +152,11 @@ public sealed class StatementServiceTests
     }
 
     /// <summary>
-    /// Verifies that a clean file upload saves the file, parses it, and returns a <see cref="StatementUploadResponse"/>.
+    /// Verifies that a clean file upload saves the file, inserts the record,
+    /// publishes a message, and returns a response with status "uploaded".
     /// </summary>
     [Fact]
-    public async Task UploadAsync_WithCleanFileAndNewStatement_SavesAndReturnsResponse()
+    public async Task UploadAsync_WithCleanFileAndNewStatement_SavesAndPublishesMessage()
     {
         var fileMock = CreateMockPdfFile();
         var statementId = Guid.NewGuid();
@@ -188,40 +191,18 @@ public sealed class StatementServiceTests
                 UploadedAt = DateTimeOffset.UtcNow
             });
 
-        _statementParserMock
-            .Setup(x => x.Parse(It.IsAny<string>()))
-            .Returns(new List<ParsedStatementTransaction>
-            {
-                new(new DateOnly(2025, 1, 15), "Coles", 50.00m, "debit", null, "Groceries")
-            });
-
-        // ExecuteAsync for transaction inserts + status update
-        _dbExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<CommandDefinition>()))
-            .ReturnsAsync(1);
-
-        // Second QuerySingleAsync for the processed statement
-        _dbExecutorMock
-            .Setup(x => x.QuerySingleAsync<StatementUploadResponse>(It.IsAny<CommandDefinition>()))
-            .ReturnsAsync(new StatementUploadResponse
-            {
-                Id = statementId,
-                UserId = _userId,
-                OriginalFileName = "statement.pdf",
-                StoredFileName = "statement-file.pdf",
-                FileHash = "HASH123",
-                SizeInBytes = 1024,
-                ContentType = "application/pdf",
-                Status = "processed",
-                UploadedAt = DateTimeOffset.UtcNow,
-                ParsedTransactionCount = 1
-            });
+        // Publish endpoint mock (no setup needed — we just verify it was called)
 
         var result = await _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         result.Should().NotBeNull();
-        result.Status.Should().Be("processed");
+        result.Status.Should().Be("uploaded");
         result.Id.Should().Be(statementId);
+
+        // Verify a ProcessStatementMessage was published
+        _messagePublisherMock.Verify(
+            x => x.PublishAsync(It.IsAny<ProcessStatementMessage>(), It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
@@ -251,55 +232,54 @@ public sealed class StatementServiceTests
         result.Id.Should().Be(existingId);
         result.Status.Should().Be("uploaded");
         result.ParsedTransactionCount.Should().Be(0);
-        _statementParserMock.Verify(x => x.Parse(It.IsAny<string>()), Times.Never);
+
+        // Message should not be published for a duplicate
+        _messagePublisherMock.Verify(
+            x => x.PublishAsync(It.IsAny<ProcessStatementMessage>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     /// <summary>
-    /// Verifies that when the parser throws, the statement status is set to "failed".
+    /// Verifies that GetStatementAsync returns the statement when it exists and belongs to the user.
     /// </summary>
     [Fact]
-    public async Task UploadAsync_WhenParserThrows_SetsStatusToFailed()
+    public async Task GetStatementAsync_WithValidId_ReturnsStatement()
     {
-        var fileMock = CreateMockPdfFile();
+        var statementId = Guid.NewGuid();
 
         _dbExecutorMock
-            .Setup(x => x.QuerySingleAsync<bool>(It.IsAny<CommandDefinition>()))
-            .ReturnsAsync(true);
-
-        _virusScanServiceMock
-            .Setup(x => x.ScanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new VirusScanResult(true, null, TimeSpan.FromMilliseconds(100)));
-
-        _dbExecutorMock
-            .Setup(x => x.QuerySingleOrDefaultAsync<Guid?>(It.IsAny<CommandDefinition>()))
-            .ReturnsAsync((Guid?)null);
-
-        _dbExecutorMock
-            .Setup(x => x.QuerySingleAsync<StatementUploadResponse>(It.IsAny<CommandDefinition>()))
+            .Setup(x => x.QuerySingleOrDefaultAsync<StatementUploadResponse>(It.IsAny<CommandDefinition>()))
             .ReturnsAsync(new StatementUploadResponse
             {
-                Id = Guid.NewGuid(),
+                Id = statementId,
                 UserId = _userId,
                 OriginalFileName = "statement.pdf",
                 StoredFileName = "statement-file.pdf",
                 FileHash = "HASH123",
                 SizeInBytes = 1024,
-                ContentType = "application/pdf",
-                Status = "uploaded",
+                Status = "processing",
                 UploadedAt = DateTimeOffset.UtcNow
             });
 
-        _statementParserMock
-            .Setup(x => x.Parse(It.IsAny<string>()))
-            .Throws(new InvalidDataException("Corrupt PDF"));
+        var result = await _sut.GetStatementAsync(_userId, statementId, CancellationToken.None);
 
+        result.Should().NotBeNull();
+        result!.Id.Should().Be(statementId);
+        result.Status.Should().Be("processing");
+    }
+
+    /// <summary>
+    /// Verifies that GetStatementAsync returns null when the statement does not belong to the user.
+    /// </summary>
+    [Fact]
+    public async Task GetStatementAsync_WithNonExistentId_ReturnsNull()
+    {
         _dbExecutorMock
-            .Setup(x => x.ExecuteAsync(It.IsAny<CommandDefinition>()))
-            .ReturnsAsync(1);
+            .Setup(x => x.QuerySingleOrDefaultAsync<StatementUploadResponse>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync((StatementUploadResponse?)null);
 
-        var act = () => _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
+        var result = await _sut.GetStatementAsync(_userId, Guid.NewGuid(), CancellationToken.None);
 
-        await act.Should().ThrowAsync<InvalidOperationException>()
-            .WithMessage("*corrupted*");
+        result.Should().BeNull();
     }
 }

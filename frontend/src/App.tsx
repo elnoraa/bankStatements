@@ -41,6 +41,8 @@ type StatementUploadResponse = {
   status: string;
   uploadedAt: string;
   parsedTransactionCount: number;
+  processedAt?: string | null;
+  errorMessage?: string | null;
 };
 
 /** Spending aggregated by category. */
@@ -97,6 +99,9 @@ function App() {
   // Upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<StatementUploadResponse | null>(null);
+  const [pendingStatementId, setPendingStatementId] = useState<string | null>(null);
+  const [statementStatus, setStatementStatus] = useState<string | null>(null);
+  const [parsedTransactionCount, setParsedTransactionCount] = useState(0);
 
   // Analysis state
   const [summary, setSummary] = useState<SpendingSummary | null>(null);
@@ -344,15 +349,54 @@ function App() {
         throw new Error(await response.text());
       }
 
-      setUpload(await response.json() as StatementUploadResponse);
+      const result = await response.json() as StatementUploadResponse;
+      setUpload({ ...result });
+      setPendingStatementId(result.id);
+      setStatementStatus('uploaded');
       setSelectedFile(null);
-      await loadSummary();
     } catch (error) {
       setAppMessage(error instanceof Error ? error.message : 'Statement upload failed.');
     } finally {
       setIsUploadLoading(false);
     }
   }
+
+  // Poll for statement processing status after upload
+  useEffect(() => {
+    if (!pendingStatementId) return;
+
+    const poll = async () => {
+      try {
+        const response = await authedFetch(`${apiBaseUrl}/api/v1/statements/${pendingStatementId}`);
+        if (!response.ok) throw new Error('Poll failed');
+        const data: StatementUploadResponse = await response.json();
+
+        setStatementStatus(data.status);
+        setParsedTransactionCount(data.parsedTransactionCount ?? 0);
+        setUpload({
+          id: data.id,
+          originalFileName: data.originalFileName,
+          storedFileName: data.storedFileName,
+          status: data.status,
+          uploadedAt: data.uploadedAt,
+          parsedTransactionCount: data.parsedTransactionCount ?? 0,
+        });
+
+        if (data.status === 'processed') {
+          setPendingStatementId(null);
+          void loadSummary();
+        } else if (data.status === 'failed') {
+          setPendingStatementId(null);
+          setAppMessage(data.errorMessage ?? 'Statement processing failed.');
+        }
+      } catch {
+        // Silently retry on next interval
+      }
+    };
+
+    const interval = setInterval(poll, 2000);
+    return () => clearInterval(interval);
+  }, [pendingStatementId]);
 
   /**
    * Loads the spending analysis summary from the API.
@@ -627,8 +671,11 @@ function App() {
           )}
 
           {upload && (
-            <p className="success-text">
-              {upload.originalFileName} processed with {upload.parsedTransactionCount} transactions.
+            <p className={statementStatus === 'failed' ? 'error-text' : 'success-text'}>
+              {statementStatus === 'uploaded' && `${upload.originalFileName} uploaded — processing...`}
+              {statementStatus === 'processing' && `${upload.originalFileName} processing...`}
+              {statementStatus === 'processed' && `${upload.originalFileName} processed with ${parsedTransactionCount} transactions.`}
+              {statementStatus === 'failed' && `${upload.originalFileName} processing failed.`}
             </p>
           )}
           {appMessage && <p className="error-text">{appMessage}</p>}

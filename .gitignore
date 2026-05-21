@@ -31,4 +31,7 @@ Uploads/
 # Coverage
 coverage/
 
+# Claude
+.claude/
+
 *.txt

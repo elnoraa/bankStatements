@@ -11,6 +11,7 @@ using Statements.WebAPI.Data;
 using Statements.WebAPI.Services.Analysis;
 using Statements.WebAPI.Services.Auth;
 using Statements.WebAPI.Services.BankAccounts;
+using Statements.WebAPI.Services.Messaging;
 using Statements.WebAPI.Services.Statements;
 
 // Register Dapper type handlers for DateOnly (required for Npgsql compatibility)
@@ -120,6 +121,11 @@ builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddTransient<IStatementParser, PdfStatementParser>();
 builder.Services.Configure<ClamAvOptions>(builder.Configuration.GetSection(ClamAvOptions.SectionName));
 builder.Services.AddSingleton<IVirusScanService, ClamAvVirusScanService>();
+
+// RabbitMQ for background statement processing
+builder.Services.AddSingleton<IMessagePublisher, RabbitMqPublisher>();
+builder.Services.AddScoped<ProcessStatementConsumer>();
+builder.Services.AddHostedService<StatementProcessingBackgroundService>();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>

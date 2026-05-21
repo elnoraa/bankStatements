@@ -59,4 +59,15 @@ public sealed class StatementUploadResponse
     /// The number of transactions parsed from the statement.
     /// </summary>
     public int ParsedTransactionCount { get; init; }
+
+    /// <summary>
+    /// The date and time when background processing completed.
+    /// Null while the statement is still being processed.
+    /// </summary>
+    public DateTimeOffset? ProcessedAt { get; init; }
+
+    /// <summary>
+    /// If processing failed, a human-readable error message.
+    /// </summary>
+    public string? ErrorMessage { get; init; }
 }

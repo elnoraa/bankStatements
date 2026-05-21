@@ -82,6 +82,41 @@ public sealed class StatementsController : ControllerBase
     }
 
     /// <summary>
+    /// Gets the current processing status of a previously uploaded statement.
+    /// </summary>
+    /// <param name="statementId">The statement ID returned from the upload endpoint.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="StatementUploadResponse"/> with the current status.</returns>
+    /// <response code="200">Status retrieved successfully.</response>
+    /// <response code="401">User not authenticated.</response>
+    /// <response code="404">Statement not found or does not belong to the user.</response>
+    [HttpGet("{statementId}")]
+    public async Task<ActionResult<StatementUploadResponse>> GetStatement(
+        Guid statementId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+
+        if (userId is null)
+        {
+            _logger.LogWarning("GET /api/v1/statements/{StatementId} - Unauthorized: invalid user id in token", statementId);
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        var statement = await _statementService.GetStatementAsync(
+            userId.Value, statementId, cancellationToken);
+
+        if (statement is null)
+        {
+            _logger.LogWarning("GET /api/v1/statements/{StatementId} - Not found for user {UserId}", statementId, userId);
+            return NotFound("Statement not found.");
+        }
+
+        _logger.LogInformation("GET /api/v1/statements/{StatementId} - Status={Status}", statementId, statement.Status);
+        return Ok(statement);
+    }
+
+    /// <summary>
     /// Extracts the current user's ID from the JWT claims in the authorization header.
     /// </summary>
     /// <returns>The user's <see cref="Guid"/> if found and valid; otherwise <c>null</c>.</returns>

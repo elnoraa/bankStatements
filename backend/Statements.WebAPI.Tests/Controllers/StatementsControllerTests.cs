@@ -131,9 +131,9 @@ public sealed class StatementsControllerTests
                 FileHash = "HASH123",
                 SizeInBytes = 1024,
                 ContentType = "application/pdf",
-                Status = "processed",
+                Status = "uploaded",
                 UploadedAt = DateTimeOffset.UtcNow,
-                ParsedTransactionCount = 5
+                ParsedTransactionCount = 0
             });
 
         var result = await _sut.Upload(file, bankAccountId, CancellationToken.None);
@@ -159,5 +159,66 @@ public sealed class StatementsControllerTests
         var result = await _sut.Upload(file, bankAccountId, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    // --- GET /api/v1/statements/{statementId} tests ---
+
+    /// <summary>
+    /// Verifies that GetStatement with a valid ID returns 200 OK.
+    /// </summary>
+    [Fact]
+    public async Task GetStatement_WithValidId_ReturnsOk()
+    {
+        SetupUserIdentity();
+        var statementId = Guid.NewGuid();
+
+        _statementServiceMock
+            .Setup(x => x.GetStatementAsync(_userId, statementId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new StatementUploadResponse
+            {
+                Id = statementId,
+                UserId = _userId,
+                OriginalFileName = "statement.pdf",
+                StoredFileName = "statement-file.pdf",
+                FileHash = "HASH123",
+                SizeInBytes = 1024,
+                Status = "processing",
+                UploadedAt = DateTimeOffset.UtcNow
+            });
+
+        var result = await _sut.GetStatement(statementId, CancellationToken.None);
+
+        var okResult = result.Result.Should().BeOfType<OkObjectResult>().Subject;
+        okResult.StatusCode.Should().Be(200);
+    }
+
+    /// <summary>
+    /// Verifies that GetStatement with a non-existent ID returns 404 NotFound.
+    /// </summary>
+    [Fact]
+    public async Task GetStatement_WithNonExistentId_ReturnsNotFound()
+    {
+        SetupUserIdentity();
+
+        _statementServiceMock
+            .Setup(x => x.GetStatementAsync(_userId, It.IsAny<Guid>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync((StatementUploadResponse?)null);
+
+        var result = await _sut.GetStatement(Guid.NewGuid(), CancellationToken.None);
+
+        result.Result.Should().BeOfType<NotFoundObjectResult>();
+    }
+
+    /// <summary>
+    /// Verifies that GetStatement without authentication returns 401 Unauthorized.
+    /// </summary>
+    [Fact]
+    public async Task GetStatement_WithoutAuth_ReturnsUnauthorized()
+    {
+        SetupNoUserIdentity();
+
+        var result = await _sut.GetStatement(Guid.NewGuid(), CancellationToken.None);
+
+        result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
 }
