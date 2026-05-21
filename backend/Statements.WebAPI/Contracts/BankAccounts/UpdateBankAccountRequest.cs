@@ -8,5 +8,5 @@ namespace Statements.WebAPI.Contracts.BankAccounts;
 /// <param name="AccountName">The updated display name for the account.</param>
 /// <param name="BankName">Optional updated institution name.</param>
 public sealed record UpdateBankAccountRequest(
-    [property: Required, MaxLength(120)] string AccountName,
-    [property: MaxLength(120)] string? BankName);
+    [Required, MaxLength(120)] string AccountName,
+    [MaxLength(120)] string? BankName);

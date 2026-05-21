@@ -29,7 +29,7 @@ export function StatementManager({ authedFetch }: StatementManagerProps) {
       if (!response.ok) throw new Error('Failed to load');
       setStatements(await response.json());
     } catch {
-      setMessage('Could not load statements.');
+      // Silently ignore load failures — empty state shown below
     } finally {
       setIsLoading(false);
     }

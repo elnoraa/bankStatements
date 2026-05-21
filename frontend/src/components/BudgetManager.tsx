@@ -2,11 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { apiBaseUrl } from '../types';
 import '../Budget.css';
 
-interface BudgetCategory {
-  id: string;
-  name: string;
-}
-
 interface BudgetItem {
   id: string;
   categoryId: string;
@@ -29,7 +24,6 @@ export function BudgetManager({ categories, authedFetch, onBudgetsChanged }: Bud
   const [editAmounts, setEditAmounts] = useState<Record<string, string>>({});
   const [message, setMessage] = useState('');
 
-  const monthYear = `${year}-${String(month).padStart(2, '0')}`;
 
   const loadBudgets = useCallback(async () => {
     setIsLoading(true);
@@ -44,7 +38,7 @@ export function BudgetManager({ categories, authedFetch, onBudgetsChanged }: Bud
       }
       setEditAmounts(amounts);
     } catch {
-      setMessage('Could not load budgets.');
+      // Silently ignore load failures — empty state shown below
     } finally {
       setIsLoading(false);
     }

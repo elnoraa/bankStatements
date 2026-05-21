@@ -8,5 +8,5 @@ namespace Statements.WebAPI.Contracts.Auth;
 /// <param name="Email">The user's email address. Must be a valid email format.</param>
 /// <param name="Password">The user's password. Minimum 8 characters, maximum 200 characters.</param>
 public sealed record LoginRequest(
-    [property: Required, EmailAddress, MaxLength(320)] string Email,
-    [property: Required, MinLength(8), MaxLength(200)] string Password);
+    [Required, EmailAddress, MaxLength(320)] string Email,
+    [Required, MinLength(8), MaxLength(200)] string Password);

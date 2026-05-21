@@ -120,7 +120,7 @@ function App() {
         return TOTAL_ID;
       });
     } catch {
-      setAccountsMessage('Could not load accounts.');
+      // Silently ignore load failures — empty state handles it
     } finally {
       setIsAccountsLoading(false);
     }

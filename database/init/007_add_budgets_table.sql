@@ -2,7 +2,7 @@
 -- Migration 007: Create budgets table for monthly budget tracking per category
 -- =============================================================================
 
-CREATE TABLE budgets (
+CREATE TABLE IF NOT EXISTS budgets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
     category_id UUID NOT NULL REFERENCES transaction_categories(id) ON DELETE CASCADE,
@@ -13,5 +13,5 @@ CREATE TABLE budgets (
     UNIQUE(user_id, category_id, month_year)
 );
 
-CREATE INDEX idx_budgets_user_month ON budgets(user_id, month_year);
-CREATE INDEX idx_budgets_category ON budgets(category_id);
+CREATE INDEX IF NOT EXISTS idx_budgets_user_month ON budgets(user_id, month_year);
+CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);
