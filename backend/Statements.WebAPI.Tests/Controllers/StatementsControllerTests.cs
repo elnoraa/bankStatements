@@ -78,7 +78,7 @@ public sealed class StatementsControllerTests
     {
         SetupUserIdentity();
 
-        var result = await _sut.Upload(null, null, CancellationToken.None);
+        var result = await _sut.Upload(null, Guid.NewGuid(), CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -91,7 +91,7 @@ public sealed class StatementsControllerTests
     {
         SetupUserIdentity();
 
-        var result = await _sut.Upload(null, null, CancellationToken.None);
+        var result = await _sut.Upload(null, Guid.NewGuid(), CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
@@ -104,7 +104,7 @@ public sealed class StatementsControllerTests
     {
         SetupNoUserIdentity();
 
-        var result = await _sut.Upload(CreateMockPdfFile().Object, null, CancellationToken.None);
+        var result = await _sut.Upload(CreateMockPdfFile().Object, Guid.NewGuid(), CancellationToken.None);
 
         result.Result.Should().BeOfType<UnauthorizedObjectResult>();
     }
@@ -150,12 +150,13 @@ public sealed class StatementsControllerTests
     {
         SetupUserIdentity();
         var file = CreateMockPdfFile().Object;
+        var bankAccountId = Guid.NewGuid();
 
         _statementServiceMock
-            .Setup(x => x.UploadAsync(_userId, null, file, It.IsAny<CancellationToken>()))
+            .Setup(x => x.UploadAsync(_userId, bankAccountId, file, It.IsAny<CancellationToken>()))
             .ThrowsAsync(new InvalidOperationException("Upload error"));
 
-        var result = await _sut.Upload(file, null, CancellationToken.None);
+        var result = await _sut.Upload(file, bankAccountId, CancellationToken.None);
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }

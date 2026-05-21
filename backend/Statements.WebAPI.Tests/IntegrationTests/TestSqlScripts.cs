@@ -48,7 +48,7 @@ internal static class TestSqlScripts
         CREATE TABLE bank_statements (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID NOT NULL REFERENCES app_users(id) ON DELETE CASCADE,
-            bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE SET NULL,
+            bank_account_id UUID NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
             original_file_name VARCHAR(255) NOT NULL,
             stored_file_name VARCHAR(255) NOT NULL UNIQUE,
             file_hash VARCHAR(64) NOT NULL,
@@ -75,7 +75,7 @@ internal static class TestSqlScripts
         CREATE TABLE statement_transactions (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             bank_statement_id UUID NOT NULL REFERENCES bank_statements(id) ON DELETE CASCADE,
-            bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE SET NULL,
+            bank_account_id UUID REFERENCES bank_accounts(id) ON DELETE CASCADE,
             category_id UUID REFERENCES transaction_categories(id) ON DELETE SET NULL,
             transaction_date DATE NOT NULL,
             description TEXT NOT NULL,

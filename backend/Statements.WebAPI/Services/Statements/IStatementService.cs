@@ -17,7 +17,7 @@ public interface IStatementService
     /// <returns>A <see cref="StatementUploadResponse"/> with the result of the upload.</returns>
     Task<StatementUploadResponse> UploadAsync(
         Guid userId,
-        Guid? bankAccountId,
+        Guid bankAccountId,
         IFormFile file,
         CancellationToken cancellationToken);
 }

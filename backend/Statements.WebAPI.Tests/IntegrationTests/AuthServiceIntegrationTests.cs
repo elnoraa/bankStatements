@@ -8,6 +8,7 @@ using Moq;
 using Npgsql;
 using Statements.WebAPI.Auth;
 using Statements.WebAPI.Contracts.Auth;
+using Statements.WebAPI.Contracts.BankAccounts;
 using Statements.WebAPI.Data;
 using Statements.WebAPI.Services.Auth;
 
@@ -112,6 +113,15 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
                 "SELECT COUNT(*) FROM refresh_tokens WHERE user_id = @UserId",
                 new { UserId = dbUser.Id }));
         tokenCount.Should().Be(1);
+
+        // Verify the default "Untitled" bank account was auto-created
+        var bankAccounts = await _dbExecutor.QueryAsync<BankAccountResponse>(
+            new CommandDefinition(
+                "SELECT id AS Id, user_id AS UserId, bank_name AS BankName, account_name AS AccountName, currency AS Currency FROM bank_accounts WHERE user_id = @UserId",
+                new { UserId = dbUser.Id }));
+        bankAccounts.Should().HaveCount(1);
+        bankAccounts.Single().AccountName.Should().Be("Untitled");
+        bankAccounts.Single().Currency.Should().Be("AUD");
     }
 
     [Fact]

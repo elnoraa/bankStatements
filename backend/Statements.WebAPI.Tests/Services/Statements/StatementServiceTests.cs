@@ -22,6 +22,7 @@ public sealed class StatementServiceTests
     private readonly IConfiguration _configuration;
     private readonly StatementService _sut;
     private readonly Guid _userId = Guid.NewGuid();
+    private readonly Guid _bankAccountId = Guid.NewGuid();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="StatementServiceTests"/> class.
@@ -78,7 +79,7 @@ public sealed class StatementServiceTests
     {
         var fileMock = CreateMockPdfFile("statement.txt");
 
-        var act = () => _sut.UploadAsync(_userId, null, fileMock.Object, CancellationToken.None);
+        var act = () => _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Only PDF bank statements are supported.");
@@ -134,11 +135,15 @@ public sealed class StatementServiceTests
     {
         var fileMock = CreateMockPdfFile();
 
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleAsync<bool>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(true);
+
         _virusScanServiceMock
             .Setup(x => x.ScanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VirusScanResult(false, null, TimeSpan.FromMilliseconds(100)));
 
-        var act = () => _sut.UploadAsync(_userId, null, fileMock.Object, CancellationToken.None);
+        var act = () => _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*could not be verified as safe*");
@@ -152,6 +157,11 @@ public sealed class StatementServiceTests
     {
         var fileMock = CreateMockPdfFile();
         var statementId = Guid.NewGuid();
+
+        // Bank account ownership check passes
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleAsync<bool>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(true);
 
         _virusScanServiceMock
             .Setup(x => x.ScanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -207,7 +217,7 @@ public sealed class StatementServiceTests
                 ParsedTransactionCount = 1
             });
 
-        var result = await _sut.UploadAsync(_userId, null, fileMock.Object, CancellationToken.None);
+        var result = await _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         result.Should().NotBeNull();
         result.Status.Should().Be("processed");
@@ -223,6 +233,10 @@ public sealed class StatementServiceTests
         var fileMock = CreateMockPdfFile();
         var existingId = Guid.NewGuid();
 
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleAsync<bool>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(true);
+
         _virusScanServiceMock
             .Setup(x => x.ScanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new VirusScanResult(true, null, TimeSpan.FromMilliseconds(100)));
@@ -231,7 +245,7 @@ public sealed class StatementServiceTests
             .Setup(x => x.QuerySingleOrDefaultAsync<Guid?>(It.IsAny<CommandDefinition>()))
             .ReturnsAsync(existingId);
 
-        var result = await _sut.UploadAsync(_userId, null, fileMock.Object, CancellationToken.None);
+        var result = await _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         result.Should().NotBeNull();
         result.Id.Should().Be(existingId);
@@ -247,6 +261,10 @@ public sealed class StatementServiceTests
     public async Task UploadAsync_WhenParserThrows_SetsStatusToFailed()
     {
         var fileMock = CreateMockPdfFile();
+
+        _dbExecutorMock
+            .Setup(x => x.QuerySingleAsync<bool>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(true);
 
         _virusScanServiceMock
             .Setup(x => x.ScanAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -279,7 +297,7 @@ public sealed class StatementServiceTests
             .Setup(x => x.ExecuteAsync(It.IsAny<CommandDefinition>()))
             .ReturnsAsync(1);
 
-        var act = () => _sut.UploadAsync(_userId, null, fileMock.Object, CancellationToken.None);
+        var act = () => _sut.UploadAsync(_userId, _bankAccountId, fileMock.Object, CancellationToken.None);
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("*corrupted*");

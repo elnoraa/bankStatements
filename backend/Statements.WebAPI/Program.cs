@@ -10,6 +10,7 @@ using Statements.WebAPI.Auth;
 using Statements.WebAPI.Data;
 using Statements.WebAPI.Services.Analysis;
 using Statements.WebAPI.Services.Auth;
+using Statements.WebAPI.Services.BankAccounts;
 using Statements.WebAPI.Services.Statements;
 
 // Register Dapper type handlers for DateOnly (required for Npgsql compatibility)
@@ -113,6 +114,7 @@ builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddSingleton<IExternalAuthValidator, ExternalAuthValidator>();
 builder.Services.AddHttpClient("external-auth");
+builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddTransient<IStatementParser, PdfStatementParser>();

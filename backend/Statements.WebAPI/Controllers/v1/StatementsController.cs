@@ -42,7 +42,7 @@ public sealed class StatementsController : ControllerBase
     [RequestSizeLimit(MaxUploadSizeInBytes)]
     public async Task<ActionResult<StatementUploadResponse>> Upload(
         [FromForm] IFormFile? file,
-        [FromForm] Guid? bankAccountId,
+        [FromForm] Guid bankAccountId,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -51,6 +51,12 @@ public sealed class StatementsController : ControllerBase
         {
             _logger.LogWarning("POST /api/v1/statements/upload - Unauthorized: invalid user id in token");
             return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        if (bankAccountId == Guid.Empty)
+        {
+            _logger.LogWarning("Upload rejected - no bank account provided");
+            return BadRequest("A bank account must be selected to upload a statement.");
         }
 
         if (file is null || file.Length == 0)

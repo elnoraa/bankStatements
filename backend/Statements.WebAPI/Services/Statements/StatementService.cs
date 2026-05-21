@@ -45,7 +45,7 @@ public sealed class StatementService : IStatementService
     /// <inheritdoc />
     public async Task<StatementUploadResponse> UploadAsync(
         Guid userId,
-        Guid? bankAccountId,
+        Guid bankAccountId,
         IFormFile file,
         CancellationToken cancellationToken)
     {
@@ -58,29 +58,26 @@ public sealed class StatementService : IStatementService
             throw new InvalidOperationException("Only PDF bank statements are supported.");
         }
 
-        if (bankAccountId is not null)
+        var accountBelongsToUser = await _dbExecutor.QuerySingleAsync<bool>(
+            new CommandDefinition(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM bank_accounts
+                    WHERE id = @BankAccountId
+                    AND user_id = @UserId
+                )
+                """,
+                new { BankAccountId = bankAccountId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        if (!accountBelongsToUser)
         {
-            var accountBelongsToUser = await _dbExecutor.QuerySingleAsync<bool>(
-                new CommandDefinition(
-                    """
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM bank_accounts
-                        WHERE id = @BankAccountId
-                        AND user_id = @UserId
-                    )
-                    """,
-                    new { BankAccountId = bankAccountId, UserId = userId },
-                    cancellationToken: cancellationToken));
-
-            if (!accountBelongsToUser)
-            {
-                _logger.LogWarning("Upload rejected - bank account {BankAccountId} does not belong to user {UserId}", bankAccountId, userId);
-                throw new InvalidOperationException("The selected bank account does not exist for this user.");
-            }
-
-            _logger.LogDebug("Bank account {BankAccountId} verified for user {UserId}", bankAccountId, userId);
+            _logger.LogWarning("Upload rejected - bank account {BankAccountId} does not belong to user {UserId}", bankAccountId, userId);
+            throw new InvalidOperationException("The selected bank account does not exist for this user.");
         }
+
+        _logger.LogDebug("Bank account {BankAccountId} verified for user {UserId}", bankAccountId, userId);
 
         var uploadsDirectory = GetUploadsDirectory();
         Directory.CreateDirectory(uploadsDirectory);

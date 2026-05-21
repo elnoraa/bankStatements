@@ -220,6 +220,19 @@ public sealed class AuthService : IAuthService
                 cancellationToken: cancellationToken));
 
         _logger.LogInformation("User registered successfully: {UserId}, Email: {Email}", user.Id, user.Email);
+
+        // Create a default "Untitled" bank account for the new user
+        await _dbExecutor.ExecuteAsync(
+            new CommandDefinition(
+                """
+                INSERT INTO bank_accounts (user_id, bank_name, account_name, currency)
+                VALUES (@UserId, '', 'Untitled', 'AUD')
+                """,
+                new { UserId = user.Id },
+                cancellationToken: cancellationToken));
+
+        _logger.LogDebug("Default bank account created for user {UserId}", user.Id);
+
         return await CreateAuthResponseAsync(user, cancellationToken);
     }
 

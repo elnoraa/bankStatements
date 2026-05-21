@@ -8,91 +8,75 @@ type AuthMode = 'login' | 'register';
 
 /** Authenticated user profile returned from the API. */
 type AuthUser = {
-  /** Unique user identifier. */
   id: string;
-  /** User's email address. */
   email: string;
-  /** User's display name. */
   displayName: string;
-  /** Whether the user's email has been verified. */
   emailVerified: boolean;
 };
 
 /** Auth response containing access token, expiry, and user info. */
 type AuthResponse = {
-  /** JWT access token for API authorization. */
   accessToken: string;
-  /** Date/time when the access token expires. */
   accessTokenExpiresAt: string;
-  /** Authenticated user profile. */
   user: AuthUser;
+};
+
+/** A bank account belonging to the user. */
+type BankAccount = {
+  id: string;
+  userId: string;
+  bankName: string;
+  accountName: string;
+  accountMask: string | null;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** Response after uploading a bank statement. */
 type StatementUploadResponse = {
-  /** Unique statement identifier. */
   id: string;
-  /** Original file name as provided by the user. */
   originalFileName: string;
-  /** Unique file name used for server storage. */
   storedFileName: string;
-  /** Processing status (e.g., "uploaded", "processing", "completed"). */
   status: string;
-  /** ISO timestamp of when the statement was uploaded. */
   uploadedAt: string;
-  /** Number of transactions parsed from the statement. */
   parsedTransactionCount: number;
 };
 
 /** Spending aggregated by category. */
 type CategorySpending = {
-  /** The spending category name. */
   category: string;
-  /** Total debit amount in this category. */
   totalDebit: number;
-  /** Number of transactions in this category. */
   transactionCount: number;
 };
 
 /** A single recent transaction. */
 type RecentTransaction = {
-  /** Unique transaction identifier. */
   id: string;
-  /** ISO date of the transaction. */
   transactionDate: string;
-  /** Transaction description or merchant name. */
   description: string;
-  /** Transaction amount. */
   amount: number;
-  /** "credit" or "debit". */
   transactionType: 'credit' | 'debit';
-  /** Assigned spending category, if any. */
   category?: string | null;
 };
 
 /** Spending analysis summary for a period. */
 type SpendingSummary = {
-  /** Optional start date of the analysis period. */
   periodStart?: string | null;
-  /** Optional end date of the analysis period. */
   periodEnd?: string | null;
-  /** Total credit (income) amount. */
   totalCredit: number;
-  /** Total debit (expense) amount. */
   totalDebit: number;
-  /** Net cash flow (credit - debit). */
   netCashflow: number;
-  /** Whether net cash flow is positive. */
   isCashflowPositive: boolean;
-  /** Spending breakdown by category. */
   spendingByCategory: CategorySpending[];
-  /** Recent individual transactions. */
   recentTransactions: RecentTransaction[];
 };
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5213';
 
-/** Main application component with auth flow, statement upload, and spending analysis. */
+const TOTAL_ID = '__total__';
+
+/** Main application component with auth flow, account management, statement upload, and spending analysis. */
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [displayName, setDisplayName] = useState('');
@@ -101,8 +85,20 @@ function App() {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [authMessage, setAuthMessage] = useState('');
+
+  // Bank account state
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>(TOTAL_ID);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
+  const [editingAccountName, setEditingAccountName] = useState('');
+  const [isAccountsLoading, setIsAccountsLoading] = useState(false);
+  const [accountsMessage, setAccountsMessage] = useState('');
+
+  // Upload state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [upload, setUpload] = useState<StatementUploadResponse | null>(null);
+
+  // Analysis state
   const [summary, setSummary] = useState<SpendingSummary | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isUploadLoading, setIsUploadLoading] = useState(false);
@@ -111,11 +107,20 @@ function App() {
 
   // Track current access token for API calls (stored in memory only — never localStorage)
   const accessTokenRef = useRef<string | null>(null);
+  const editInputRef = useRef<HTMLInputElement | null>(null);
 
   const currency = useMemo(
     () => new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }),
     []
   );
+
+  // Focus the edit input when entering rename mode
+  useEffect(() => {
+    if (editingAccountId && editInputRef.current) {
+      editInputRef.current.focus();
+      editInputRef.current.select();
+    }
+  }, [editingAccountId]);
 
   // On mount, try to refresh the auth session via httpOnly cookie
   useEffect(() => {
@@ -130,22 +135,120 @@ function App() {
     void init();
   }, []);
 
-  // When auth changes, load summary or clear state
+  // When auth changes, load accounts and summary
   useEffect(() => {
     if (auth) {
       accessTokenRef.current = auth.accessToken;
+      void loadAccounts(auth.accessToken);
       void loadSummary(auth.accessToken);
     } else {
       accessTokenRef.current = null;
+      setAccounts([]);
+      setSelectedAccountId(TOTAL_ID);
       setSummary(null);
       setUpload(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [auth]);
 
+  /** Fetches the user's bank accounts from the API. */
+  async function loadAccounts(accessToken?: string) {
+    const token = accessToken ?? accessTokenRef.current;
+    if (!token) return;
+
+    setIsAccountsLoading(true);
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/bank-accounts`);
+      if (!response.ok) throw new Error(await response.text());
+      const fetched: BankAccount[] = await response.json();
+      setAccounts(fetched);
+
+      // If selected account is still TOTAL_ID, keep it; otherwise ensure it still exists
+      setSelectedAccountId((prev) => {
+        if (prev === TOTAL_ID) return TOTAL_ID;
+        if (fetched.some((a) => a.id === prev)) return prev;
+        return TOTAL_ID;
+      });
+    } catch {
+      setAccountsMessage('Could not load accounts.');
+    } finally {
+      setIsAccountsLoading(false);
+    }
+  }
+
+  /** Adds a new "Untitled" bank account. */
+  async function handleAddAccount() {
+    if (!auth) return;
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/bank-accounts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const created: BankAccount = await response.json();
+      setAccounts((prev) => [...prev, created]);
+      setSelectedAccountId(created.id);
+      setAccountsMessage('');
+    } catch {
+      setAccountsMessage('Could not create account.');
+    }
+  }
+
+  /** Starts inline rename for an account. */
+  function handleStartRename(account: BankAccount) {
+    setEditingAccountId(account.id);
+    setEditingAccountName(account.accountName);
+  }
+
+  /** Saves the renamed account. */
+  async function handleSaveRename(accountId: string) {
+    const name = editingAccountName.trim();
+    if (!name || !auth) {
+      cancelRename();
+      return;
+    }
+
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/bank-accounts/${accountId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accountName: name }),
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const updated: BankAccount = await response.json();
+      setAccounts((prev) => prev.map((a) => (a.id === accountId ? updated : a)));
+      cancelRename();
+    } catch {
+      setAccountsMessage('Could not rename account.');
+      cancelRename();
+    }
+  }
+
+  function cancelRename() {
+    setEditingAccountId(null);
+    setEditingAccountName('');
+  }
+
+  /** Deletes a bank account. */
+  async function handleDeleteAccount(accountId: string) {
+    if (!auth) return;
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/bank-accounts/${accountId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error(await response.text());
+      setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+      if (selectedAccountId === accountId) {
+        setSelectedAccountId(TOTAL_ID);
+      }
+    } catch {
+      setAccountsMessage('Could not delete account.');
+    }
+  }
+
   /**
    * Handles authentication form submission (login or register).
-   * On success, stores the auth response and clears the password field.
    */
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,7 +285,6 @@ function App() {
 
   /**
    * Makes an authenticated API call, automatically retrying with a refreshed token on 401.
-   * If token refresh fails, clears auth state and throws.
    */
   const authedFetch = useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const token = accessTokenRef.current;
@@ -198,7 +300,6 @@ function App() {
       },
     });
 
-    // If 401, try to refresh the token and retry once
     if (response.status === 401) {
       const refreshed = await refreshAuthToken();
       if (refreshed) {
@@ -213,7 +314,6 @@ function App() {
         });
         return retryResponse;
       }
-      // Refresh failed — clear auth state
       setAuth(null);
       accessTokenRef.current = null;
       throw new Error('Session expired. Please sign in again.');
@@ -225,16 +325,14 @@ function App() {
   /** Handles statement file upload form submission. */
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    if (!auth || !selectedFile) {
-      return;
-    }
+    if (!auth || !selectedFile || selectedAccountId === TOTAL_ID) return;
 
     setIsUploadLoading(true);
     setAppMessage('');
 
     const formData = new FormData();
     formData.append('file', selectedFile);
+    formData.append('bankAccountId', selectedAccountId);
 
     try {
       const response = await authedFetch(`${apiBaseUrl}/api/v1/statements/upload`, {
@@ -258,18 +356,22 @@ function App() {
 
   /**
    * Loads the spending analysis summary from the API.
-   * @param accessToken - Optional explicit access token to use. Falls back to the ref-stored token.
    */
   async function loadSummary(accessToken?: string) {
     const token = accessToken ?? accessTokenRef.current;
-    if (!token) {
-      return;
-    }
+    if (!token) return;
 
     setIsSummaryLoading(true);
 
     try {
-      const response = await authedFetch(`${apiBaseUrl}/api/v1/analysis/summary`);
+      const params = new URLSearchParams();
+      if (selectedAccountId !== TOTAL_ID) {
+        params.set('bankAccountId', selectedAccountId);
+      }
+
+      const query = params.toString();
+      const url = `${apiBaseUrl}/api/v1/analysis/summary${query ? `?${query}` : ''}`;
+      const response = await authedFetch(url);
 
       if (!response.ok) {
         throw new Error(await response.text());
@@ -283,7 +385,15 @@ function App() {
     }
   }
 
-  /** Signs the user out: calls the logout API and clears all auth state. */
+  /** Reload summary when selected account changes */
+  useEffect(() => {
+    if (auth) {
+      void loadSummary();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId, auth]);
+
+  /** Signs the user out. */
   async function signOut() {
     await apiLogout();
     setAuth(null);
@@ -293,6 +403,8 @@ function App() {
     setDisplayName('');
     setAppMessage('');
     setAuthMessage('');
+    setAccounts([]);
+    setSelectedAccountId(TOTAL_ID);
   }
 
   // Show loading state while checking for existing session
@@ -382,6 +494,10 @@ function App() {
     );
   }
 
+  const selectedAccount = selectedAccountId === TOTAL_ID
+    ? null
+    : accounts.find((a) => a.id === selectedAccountId) ?? null;
+
   return (
     <main className="app-shell">
       <header className="topbar">
@@ -394,23 +510,122 @@ function App() {
         </button>
       </header>
 
+      {/* Account toolbar */}
+      <div className="account-bar">
+        <label className="account-bar-label">Account:</label>
+        <div className="account-select-wrapper">
+          <select
+            className="account-select"
+            value={selectedAccountId}
+            onChange={(e) => setSelectedAccountId(e.target.value)}
+          >
+            <option value={TOTAL_ID}>Total (all accounts)</option>
+            {accounts.length > 0 && <option disabled>──────────</option>}
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.accountName}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="account-list">
+          {accounts.map((account) => (
+            <div className="account-item" key={account.id}>
+              {editingAccountId === account.id ? (
+                <input
+                  ref={editInputRef}
+                  className="account-name-edit"
+                  value={editingAccountName}
+                  onChange={(e) => setEditingAccountName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void handleSaveRename(account.id);
+                    if (e.key === 'Escape') cancelRename();
+                  }}
+                  onBlur={() => void handleSaveRename(account.id)}
+                  maxLength={120}
+                />
+              ) : (
+                <>
+                  <span
+                    className="account-name-clickable"
+                    onClick={() => handleStartRename(account)}
+                    title="Click to rename"
+                  >
+                    {account.accountName}
+                  </span>
+                  <div className="account-actions">
+                    <button
+                      className="account-action-btn"
+                      type="button"
+                      title="Rename"
+                      onClick={() => handleStartRename(account)}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="account-action-btn account-action-delete"
+                      type="button"
+                      title="Delete account and all its statements"
+                      onClick={() => {
+                        if (window.confirm(`Delete "${account.accountName}" and all its statements?`)) {
+                          void handleDeleteAccount(account.id);
+                        }
+                      }}
+                    >
+                      ×
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+        <button
+          className="account-add-btn"
+          type="button"
+          onClick={() => void handleAddAccount()}
+          disabled={isAccountsLoading}
+          title="Add account"
+        >
+          + Add account
+        </button>
+        {accountsMessage && <p className="error-text account-message">{accountsMessage}</p>}
+      </div>
+
       <section className="dashboard-grid">
         <form className="panel upload-panel" onSubmit={handleUpload}>
           <div>
             <p className="panel-label">PDF upload</p>
             <h2>Parse a bank statement</h2>
           </div>
-          <label className="file-input">
-            <span>{selectedFile ? selectedFile.name : 'Choose a PDF statement'}</span>
-            <input
-              type="file"
-              accept="application/pdf,.pdf"
-              onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-            />
-          </label>
-          <button className="primary-button" type="submit" disabled={!selectedFile || isUploadLoading}>
-            {isUploadLoading ? 'Uploading...' : 'Upload and analyse'}
-          </button>
+
+          {selectedAccountId === TOTAL_ID ? (
+            <p className="empty-state upload-hint">
+              Select a specific account above to upload a statement.
+            </p>
+          ) : (
+            <>
+              <p className="upload-context">
+                Uploading to: <strong>{selectedAccount?.accountName ?? 'Unknown'}</strong>
+              </p>
+              <label className="file-input">
+                <span>{selectedFile ? selectedFile.name : 'Choose a PDF statement'}</span>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                />
+              </label>
+              <button
+                className="primary-button"
+                type="submit"
+                disabled={!selectedFile || isUploadLoading}
+              >
+                {isUploadLoading ? 'Uploading...' : 'Upload and analyse'}
+              </button>
+            </>
+          )}
+
           {upload && (
             <p className="success-text">
               {upload.originalFileName} processed with {upload.parsedTransactionCount} transactions.
@@ -442,7 +657,7 @@ function App() {
               <p className="panel-label">Categories</p>
               <h2>Spending breakdown</h2>
             </div>
-            <button className="secondary-button" type="button" onClick={() => loadSummary()} disabled={isSummaryLoading}>
+            <button className="secondary-button" type="button" onClick={() => void loadSummary()} disabled={isSummaryLoading}>
               Refresh
             </button>
           </div>

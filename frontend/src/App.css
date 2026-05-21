@@ -378,3 +378,160 @@ button:disabled {
 .external-login-buttons button:active {
   background: #e9eef4;
 }
+
+/* ── Account Toolbar ─────────────────────────── */
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #dce3eb;
+  border-radius: 8px;
+  box-shadow: 0 12px 30px rgba(23, 32, 51, 0.07);
+}
+
+.account-bar-label {
+  color: #39475c;
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-select-wrapper {
+  position: relative;
+  min-width: 200px;
+}
+
+.account-select {
+  width: 100%;
+  min-height: 42px;
+  padding: 0 32px 0 12px;
+  border: 1px solid #c8d2df;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #172033;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23546179' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.account-select:focus {
+  outline: 3px solid rgba(54, 113, 198, 0.18);
+  border-color: #3671c6;
+}
+
+.account-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.account-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f5f7fa;
+  border: 1px solid #e4eaf1;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.account-name-clickable {
+  color: #1f2a3d;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.account-name-clickable:hover {
+  background: #e9eef4;
+}
+
+.account-name-edit {
+  min-height: 30px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  width: 130px;
+}
+
+.account-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.account-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #68758a;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.account-action-btn:hover {
+  background: #e9eef4;
+  color: #172033;
+}
+
+.account-action-delete:hover {
+  background: #fff1f0;
+  color: #a33b2b;
+}
+
+.account-add-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px dashed #91a3b7;
+  border-radius: 6px;
+  background: transparent;
+  color: #245f73;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.account-add-btn:hover {
+  background: #f5f7fa;
+  border-color: #245f73;
+}
+
+.account-message {
+  width: 100%;
+  margin-top: 0;
+}
+
+.upload-context {
+  margin: 0;
+  color: #546179;
+  font-size: 14px;
+}
+
+.upload-context strong {
+  color: #172033;
+}
+
+.upload-hint {
+  text-align: center;
+  padding: 20px 10px;
+}
