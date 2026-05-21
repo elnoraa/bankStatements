@@ -37,10 +37,20 @@ services:
       retries: 12
       start_period: 60s
 
-  test:
+  test-unit:
     build:
       context: ./backend
       target: test
+
+  test-integration:
+    build:
+      context: ./backend
+      target: test-integration
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - TESTCONTAINERS_RYUK_DISABLED=true
 
   backend:
     build:
@@ -49,7 +59,7 @@ services:
     ports:
       - "127.0.0.1:5213:5213"
     depends_on:
-      test:
+      test-unit:
         condition: service_completed_successfully
       db:
         condition: service_started

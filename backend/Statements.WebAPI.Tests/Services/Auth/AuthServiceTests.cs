@@ -320,7 +320,8 @@ public sealed class AuthServiceTests
     // ── RefreshTokenAsync ──────────────────────────────────────
     /// <summary>
     /// Verifies that a valid refresh token returns a new <see cref="AuthResponse"/>.
-    /// </summary>    [Fact]
+    /// </summary>
+    [Fact]
     public async Task RefreshTokenAsync_WithValidToken_ReturnsAuthResponse()
     {
         var userId = Guid.NewGuid();
@@ -403,7 +404,8 @@ public sealed class AuthServiceTests
     // ── RevokeTokenAsync ───────────────────────────────────────
     /// <summary>
     /// Verifies that revoking a valid token executes the database update.
-    /// </summary>    [Fact]
+    /// </summary>
+    [Fact]
     public async Task RevokeTokenAsync_WithValidToken_UpdatesDatabase()
     {
         _dbExecutorMock
@@ -418,7 +420,8 @@ public sealed class AuthServiceTests
     // ── ExternalLoginAsync ─────────────────────────────────────
     /// <summary>
     /// Verifies that an existing external login mapping returns an <see cref="AuthResponse"/>.
-    /// </summary>    [Fact]
+    /// </summary>
+    [Fact]
     public async Task ExternalLoginAsync_WithExistingExternalLogin_ReturnsAuthResponse()
     {
         var userId = Guid.NewGuid();

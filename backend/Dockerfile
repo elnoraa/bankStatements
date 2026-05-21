@@ -13,7 +13,16 @@ RUN dotnet restore Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj
 COPY Statements.WebAPI/ ./Statements.WebAPI/
 COPY Statements.WebAPI.Tests/ ./Statements.WebAPI.Tests/
 
-ENTRYPOINT ["dotnet", "test", "Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj", "--logger", "console;verbosity=detailed"]
+ENTRYPOINT ["dotnet", "test", "Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj", "--filter", "Category!=Integration", "--logger", "console;verbosity=detailed"]
+
+# ── Integration test stage ───────────────────────────────────
+# Runs integration tests (requires Docker socket for Testcontainers).
+# Does NOT block the build gate — runs alongside the API.
+FROM test AS test-integration
+# Install Docker CLI so Testcontainers' ResourceReaper (ryuk) can manage containers
+RUN apt-get update && apt-get install -y --no-install-recommends docker.io && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+ENTRYPOINT ["dotnet", "test", "Statements.WebAPI.Tests/Statements.WebAPI.Tests.csproj", "--filter", "Category=Integration", "--logger", "console;verbosity=detailed"]
 
 # ── Runtime stage ────────────────────────────────────────────
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
