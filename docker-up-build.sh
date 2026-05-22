@@ -3,12 +3,20 @@ set -e
 
 cd "$(dirname "$0")"
 
-echo "=== Starting all services (unit tests gate backend, integration tests run alongside) ==="
-docker compose up --build -d --remove-orphans
+echo "=== Building all images ==="
+docker compose build
 
-echo "=== Integration test output (Ctrl+C to stop following) ==="
-docker compose logs -f test-integration
+echo "=== Starting infrastructure services ==="
+docker compose up -d db rabbitmq clamav
 
-# Clean up any orphaned Testcontainers containers
+echo "=== Starting backend + frontend (unit tests gate backend) ==="
+docker compose up -d backend frontend
+
+echo "=== Running integration tests (output shown live, auto-exits when done) ==="
+docker compose run --rm test-integration
+
+# Testcontainers containers stay running after tests exit (RYUK is disabled),
+# so force-remove them before the final prune of any stragglers
 echo "=== Cleaning up Testcontainers containers ==="
-docker container prune --force --filter "label=org.testcontainers=true" > /dev/null 2>&1
+docker rm -f $(docker ps -q --filter "label=org.testcontainers=true") 2>/dev/null
+docker container prune --force --filter "label=org.testcontainers=true"
