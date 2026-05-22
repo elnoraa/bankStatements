@@ -77,14 +77,19 @@ public sealed class StatementServiceTests
         fileMock.Setup(x => x.FileName).Returns(fileName);
         fileMock.Setup(x => x.Length).Returns(size);
         fileMock.Setup(x => x.ContentType).Returns("application/pdf");
+
+        // PDF files start with %PDF magic bytes
+        var content = "%PDF-fake pdf content"u8.ToArray();
+
+        fileMock.Setup(x => x.OpenReadStream()).Returns(new MemoryStream(content));
+
         fileMock.Setup(x => x.CopyToAsync(It.IsAny<Stream>(), It.IsAny<CancellationToken>()))
             .Callback<Stream, CancellationToken>((stream, _) =>
             {
-                // Write some data so the SHA256 hash gets computed
-                var data = "fake pdf content"u8.ToArray();
-                stream.Write(data, 0, data.Length);
+                stream.Write(content, 0, content.Length);
             })
             .Returns(Task.CompletedTask);
+
         return fileMock;
     }
 

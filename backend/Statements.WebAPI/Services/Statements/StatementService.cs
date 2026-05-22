@@ -43,13 +43,25 @@ public sealed class StatementService : IStatementService
         IFormFile file,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Statement upload requested: UserId={UserId}, FileName={FileName}, Size={Size}",
+        _logger.LogDebug("Statement upload requested: UserId={UserId}, FileName={FileName}, Size={Size}",
             userId, file.FileName, file.Length);
 
         if (!Path.GetExtension(file.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogWarning("Upload rejected - not a PDF file: {FileName}", file.FileName);
             throw new InvalidOperationException("Only PDF bank statements are supported.");
+        }
+
+        // Verify PDF magic bytes (%PDF at offset 0) to reject files that aren't actually PDFs
+        using (var magicStream = file.OpenReadStream())
+        {
+            var header = new byte[4];
+            var bytesRead = await magicStream.ReadAsync(header, 0, 4, cancellationToken);
+            if (bytesRead < 4 || header[0] != 0x25 || header[1] != 0x50 || header[2] != 0x44 || header[3] != 0x46)
+            {
+                _logger.LogWarning("Upload rejected - file signature does not match PDF: {FileName}", file.FileName);
+                throw new InvalidOperationException("Only PDF bank statements are supported.");
+            }
         }
 
         var accountBelongsToUser = await _dbExecutor.QuerySingleAsync<bool>(
@@ -115,7 +127,7 @@ public sealed class StatementService : IStatementService
                 "Upload rejected: the file could not be verified as safe. Please try again later.");
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Virus scan passed for {FileName} ({DurationMs}ms)",
             originalFileName, scanResult.Duration.TotalMilliseconds);
 
@@ -155,7 +167,7 @@ public sealed class StatementService : IStatementService
 
         try
         {
-            _logger.LogInformation("Inserting bank statement record for file: {OriginalFileName}", originalFileName);
+            _logger.LogDebug("Inserting bank statement record for file: {OriginalFileName}", originalFileName);
 
             var statement = await _dbExecutor.QuerySingleAsync<StatementUploadResponse>(
                 new CommandDefinition(

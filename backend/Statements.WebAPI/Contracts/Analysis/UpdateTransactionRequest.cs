@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Statements.WebAPI.Contracts.Analysis;
 
 /// <summary>
@@ -7,6 +9,7 @@ namespace Statements.WebAPI.Contracts.Analysis;
 public sealed class UpdateTransactionRequest
 {
     /// <summary>Updated transaction description, if provided.</summary>
+    [MaxLength(500)]
     public string? Description { get; init; }
 
     /// <summary>Updated transaction amount, if provided.</summary>

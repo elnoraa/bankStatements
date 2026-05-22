@@ -21,7 +21,10 @@ public sealed class RegisterRequest
 
     /// <summary>
     /// The user's password. Minimum 8 characters, maximum 200 characters.
+    /// Must contain at least one uppercase letter, one lowercase letter, one digit, and one special character.
     /// </summary>
     [Required, MinLength(8), MaxLength(200)]
+    [RegularExpression(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^a-zA-Z\d]).{8,200}$",
+        ErrorMessage = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character.")]
     public string Password { get; init; } = null!;
 }

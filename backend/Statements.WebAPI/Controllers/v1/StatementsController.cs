@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Statements.WebAPI.Contracts.Statements;
 using Statements.WebAPI.Services.Statements;
 
@@ -40,6 +41,7 @@ public sealed class StatementsController : ControllerBase
     /// <response code="401">User not authenticated.</response>
     [HttpPost("upload")]
     [RequestSizeLimit(MaxUploadSizeInBytes)]
+    [EnableRateLimiting("UploadStrict")]
     public async Task<ActionResult<StatementUploadResponse>> Upload(
         [FromForm] IFormFile? file,
         [FromForm] Guid bankAccountId,
@@ -146,6 +148,7 @@ public sealed class StatementsController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>200 OK with a confirmation message, or 400 if the statement cannot be retried.</returns>
     [HttpPost("{statementId}/retry")]
+    [EnableRateLimiting("UploadRetry")]
     public async Task<ActionResult> Retry(Guid statementId, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();

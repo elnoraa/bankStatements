@@ -28,6 +28,6 @@ public sealed class ExternalCodeRequest
     /// <summary>
     /// The redirect URI registered with the provider for callback.
     /// </summary>
-    [Required]
+    [Required, Url]
     public string RedirectUri { get; init; } = null!;
 }

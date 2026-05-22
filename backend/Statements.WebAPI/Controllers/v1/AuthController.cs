@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Statements.WebAPI.Contracts.Auth;
@@ -159,6 +160,7 @@ public sealed class AuthController : ControllerBase
     /// <param name="cancellationToken">Cancellation token.</param>
     /// <returns>200 OK with a success message.</returns>
     [HttpPost("logout")]
+    [Authorize]
     public async Task<ActionResult> Logout(
         CancellationToken cancellationToken)
     {
