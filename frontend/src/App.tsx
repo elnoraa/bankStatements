@@ -10,12 +10,13 @@ import { RecentActivity } from './components/RecentActivity';
 import { StatementManager } from './components/StatementManager';
 import { BudgetManager } from './components/BudgetManager';
 import { useStatementHub, type StatementStatusUpdate } from './hooks/useStatementHub';
-import type { AuthMode, AuthResponse, BankAccount, StatementUploadResponse, SpendingSummary } from './types';
+import type { AuthMode, AuthResponse, AuthView, BankAccount, StatementUploadResponse, SpendingSummary } from './types';
 import { apiBaseUrl, TOTAL_ID } from './types';
 
 /** Main application component with auth flow, account management, statement upload, and spending analysis. */
 function App() {
   const [authMode, setAuthMode] = useState<AuthMode>('login');
+  const [authView, setAuthView] = useState<AuthView>('login');
   const [displayName, setDisplayName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -228,6 +229,72 @@ function App() {
       setPassword('');
     } catch (error) {
       setAuthMessage(error instanceof Error ? error.message : 'Authentication failed.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }
+
+  /** Sends a password reset email for the given address. */
+  async function handleForgotPassword(forgotEmail: string) {
+    setIsAuthLoading(true);
+    setAuthMessage('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail }),
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(await response.text());
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Request failed.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }
+
+  /** Verifies email using a verification token. */
+  async function handleVerifyEmail(token: string) {
+    setIsAuthLoading(true);
+    setAuthMessage('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setAuthMessage(data.message ?? 'Email verified successfully.');
+      // Refresh auth to reflect verified status
+      if (auth) {
+        setAuth({ ...auth, user: { ...auth.user, emailVerified: true } });
+      }
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Verification failed.');
+    } finally {
+      setIsAuthLoading(false);
+    }
+  }
+
+  /** Resets password using a reset token. */
+  async function handleResetPassword(resetToken: string, newPassword: string) {
+    setIsAuthLoading(true);
+    setAuthMessage('');
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/v1/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, newPassword }),
+        credentials: 'include',
+      });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
+      setAuthMessage(data.message ?? 'Password reset successfully.');
+      setAuthView('login');
+    } catch (error) {
+      setAuthMessage(error instanceof Error ? error.message : 'Reset failed.');
     } finally {
       setIsAuthLoading(false);
     }
@@ -524,6 +591,11 @@ function App() {
           authMessage={authMessage}
           isAuthLoading={isAuthLoading}
           handleAuthSubmit={handleAuthSubmit}
+          authView={authView}
+          setAuthView={setAuthView}
+          onForgotPassword={handleForgotPassword}
+          onVerifyEmail={handleVerifyEmail}
+          onResetPassword={handleResetPassword}
         />
       </main>
     );

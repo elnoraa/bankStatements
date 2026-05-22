@@ -20,6 +20,7 @@ public sealed class AuthServiceTests
     private readonly Mock<IPasswordHasher> _passwordHasherMock = new();
     private readonly Mock<IJwtTokenService> _jwtTokenServiceMock = new();
     private readonly Mock<IExternalAuthValidator> _externalAuthValidatorMock = new();
+    private readonly Mock<IEmailVerificationService> _emailVerificationServiceMock = new();
     private readonly JwtOptions _jwtOptions = new()
     {
         Issuer = "TestIssuer",
@@ -49,16 +50,18 @@ public sealed class AuthServiceTests
             _jwtTokenServiceMock.Object,
             Options.Create(_jwtOptions),
             _externalAuthValidatorMock.Object,
+            _emailVerificationServiceMock.Object,
             Mock.Of<ILogger<AuthService>>());
     }
 
     // ── RegisterAsync ──────────────────────────────────────────
 
     /// <summary>
-    /// Verifies that registering a new email returns an <see cref="AuthResponse"/> with a token.
+    /// Verifies that registering a new email returns an <see cref="AuthResponse"/> with a token
+    /// and triggers a verification email.
     /// </summary>
     [Fact]
-    public async Task RegisterAsync_WithNewEmail_ReturnsAuthResponse()
+    public async Task RegisterAsync_WithNewEmail_ReturnsAuthResponseAndSendsVerification()
     {
         var request = new RegisterRequest { Email = "new@test.com", DisplayName = "New User", Password = "SecureP@ss1" };
         var userId = Guid.NewGuid();
@@ -94,6 +97,10 @@ public sealed class AuthServiceTests
         result.User.Id.Should().Be(userId);
         result.User.Email.Should().Be("new@test.com");
         result.User.DisplayName.Should().Be("New User");
+
+        _emailVerificationServiceMock.Verify(
+            x => x.SendVerificationEmailAsync(userId, "new@test.com", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     /// <summary>
@@ -147,6 +154,9 @@ public sealed class AuthServiceTests
         var result = await _sut.RegisterAsync(request, CancellationToken.None);
 
         result.User.DisplayName.Should().Be("testuser");
+        _emailVerificationServiceMock.Verify(
+            x => x.SendVerificationEmailAsync(userId, "testuser@test.com", It.IsAny<CancellationToken>()),
+            Times.Once);
     }
 
     // ── LoginAsync ─────────────────────────────────────────────
@@ -165,6 +175,7 @@ public sealed class AuthServiceTests
             Id = userId,
             Email = "test@test.com",
             DisplayName = "Test User",
+            EmailVerified = true,
             PasswordHash = "hashed-password",
             FailedLoginAttempts = 0,
             LockedUntil = null
@@ -289,6 +300,7 @@ public sealed class AuthServiceTests
             Id = Guid.NewGuid(),
             Email = "test@test.com",
             DisplayName = "Test User",
+            EmailVerified = true,
             PasswordHash = "hashed-password",
             FailedLoginAttempts = 0,
             LockedUntil = null
@@ -514,5 +526,82 @@ public sealed class AuthServiceTests
 
         await act.Should().ThrowAsync<InvalidOperationException>()
             .WithMessage("Invalid external token");
+    }
+
+    // ── Email Verification ──────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that login with an unverified email throws <see cref="AuthInvalidCredentialsException"/>.
+    /// </summary>
+    [Fact]
+    public async Task LoginAsync_WithUnverifiedEmail_ThrowsAuthInvalidCredentialsException()
+    {
+        var request = new LoginRequest { Email = "unverified@test.com", Password = "CorrectP@ss1" };
+        var user = new AuthUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "unverified@test.com",
+            DisplayName = "Test User",
+            EmailVerified = false,
+            PasswordHash = "hashed-password",
+            FailedLoginAttempts = 0,
+            LockedUntil = null
+        };
+
+        _dbExecutorMock
+            .Setup(x => x.QueryFirstOrDefaultAsync<AuthUser>(It.IsAny<CommandDefinition>()))
+            .ReturnsAsync(user);
+
+        _passwordHasherMock
+            .Setup(x => x.Verify(request.Password, user.PasswordHash))
+            .Returns(true);
+
+        var act = () => _sut.LoginAsync(request, CancellationToken.None);
+
+        await act.Should().ThrowAsync<AuthInvalidCredentialsException>()
+            .WithMessage("*verify your email*");
+    }
+
+    /// <summary>
+    /// Verifies that VerifyEmailAsync delegates to IEmailVerificationService.
+    /// </summary>
+    [Fact]
+    public async Task VerifyEmailAsync_DelegatesToVerificationService()
+    {
+        const string token = "test-verification-token";
+
+        await _sut.VerifyEmailAsync(token, CancellationToken.None);
+
+        _emailVerificationServiceMock.Verify(
+            x => x.VerifyEmailAsync(token, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that ForgotPasswordAsync delegates to IEmailVerificationService.
+    /// </summary>
+    [Fact]
+    public async Task ForgotPasswordAsync_DelegatesToVerificationService()
+    {
+        const string email = "test@example.com";
+
+        await _sut.ForgotPasswordAsync(email, CancellationToken.None);
+
+        _emailVerificationServiceMock.Verify(
+            x => x.SendPasswordResetEmailAsync(email, It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    /// <summary>
+    /// Verifies that ResetPasswordAsync delegates to IEmailVerificationService.
+    /// </summary>
+    [Fact]
+    public async Task ResetPasswordAsync_DelegatesToVerificationService()
+    {
+        const string token = "reset-token";
+        const string newPassword = "NewP@ssword1";
+
+        await _sut.ResetPasswordAsync(token, newPassword, CancellationToken.None);
+
+        _emailVerificationServiceMock.Verify(
+            x => x.ResetPasswordAsync(token, newPassword, It.IsAny<CancellationToken>()), Times.Once);
     }
 }

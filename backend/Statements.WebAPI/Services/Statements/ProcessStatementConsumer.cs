@@ -14,6 +14,7 @@ public sealed class ProcessStatementConsumer
 {
     private readonly IDbExecutor _dbExecutor;
     private readonly IStatementParser _statementParser;
+    private readonly IOCREngine _ocrEngine;
     private readonly IConfiguration _configuration;
     private readonly IHubContext<StatementProcessingHub> _hubContext;
     private readonly ILogger<ProcessStatementConsumer> _logger;
@@ -21,12 +22,14 @@ public sealed class ProcessStatementConsumer
     public ProcessStatementConsumer(
         IDbExecutor dbExecutor,
         IStatementParser statementParser,
+        IOCREngine ocrEngine,
         IConfiguration configuration,
         IHubContext<StatementProcessingHub> hubContext,
         ILogger<ProcessStatementConsumer> logger)
     {
         _dbExecutor = dbExecutor;
         _statementParser = statementParser;
+        _ocrEngine = ocrEngine;
         _configuration = configuration;
         _hubContext = hubContext;
         _logger = logger;
@@ -83,7 +86,7 @@ public sealed class ProcessStatementConsumer
             ?? Path.Combine(Directory.GetCurrentDirectory(), "Uploads");
         var filePath = Path.Combine(uploadsDir, storedFileName);
 
-        // Step 4: Parse PDF (CPU-bound, synchronous)
+        // Step 4: Parse PDF (CPU-bound, synchronous), with OCR fallback
         IReadOnlyList<ParsedStatementTransaction> transactions;
         try
         {
@@ -91,6 +94,38 @@ public sealed class ProcessStatementConsumer
             _logger.LogInformation(
                 "Parsed {Count} transactions from statement {StatementId}",
                 transactions.Count, message.StatementId);
+
+            // If PdfPig returned no transactions, try OCR fallback
+            if (transactions.Count == 0)
+            {
+                _logger.LogInformation(
+                    "PdfPig returned 0 transactions for statement {StatementId}, attempting OCR fallback",
+                    message.StatementId);
+
+                var ocrResult = await _ocrEngine.ExtractTextAsync(filePath, cancellationToken);
+
+                if (ocrResult?.Text is not null)
+                {
+                    _logger.LogInformation(
+                        "OCR fallback extracted text for statement {StatementId}, re-attempting parse",
+                        message.StatementId);
+
+                    // Write OCR text to a temp file and re-parse
+                    var tempOcrFile = Path.GetTempFileName() + ".pdf";
+                    try
+                    {
+                        await File.WriteAllTextAsync(tempOcrFile, ocrResult.Text, cancellationToken);
+                        transactions = _statementParser.Parse(tempOcrFile);
+                        _logger.LogInformation(
+                            "OCR fallback parsed {Count} transactions from statement {StatementId}",
+                            transactions.Count, message.StatementId);
+                    }
+                    finally
+                    {
+                        if (File.Exists(tempOcrFile)) File.Delete(tempOcrFile);
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {

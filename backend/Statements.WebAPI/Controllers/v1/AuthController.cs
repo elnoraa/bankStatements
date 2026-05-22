@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -7,7 +8,8 @@ using Statements.WebAPI.Services.Auth;
 namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("1.0")]
 public sealed class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
@@ -175,6 +177,81 @@ public sealed class AuthController : ControllerBase
         ClearRefreshTokenCookie();
         _logger.LogInformation("Logout completed");
         return Ok(new { message = "Signed out successfully." });
+    }
+
+    /// <summary>
+    /// Verifies a user's email address using a verification token.
+    /// </summary>
+    /// <param name="request">The verification token.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK on successful verification.</returns>
+    /// <response code="200">Email verified successfully.</response>
+    /// <response code="400">Invalid, expired, or already-used token.</response>
+    [HttpPost("verify-email")]
+    [EnableRateLimiting("AuthDefault")]
+    public async Task<ActionResult> VerifyEmail(
+        VerifyEmailRequest request,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("POST /api/v1/auth/verify-email called");
+        try
+        {
+            await _authService.VerifyEmailAsync(request.Token, cancellationToken);
+            _logger.LogInformation("Email verified successfully");
+            return Ok(new { message = "Email verified successfully. You can now sign in." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Email verification failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Initiates a password reset for the specified email address.
+    /// Always returns 200 OK to prevent email enumeration.
+    /// </summary>
+    /// <param name="request">The email address to send the reset token to.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with a confirmation message.</returns>
+    [HttpPost("forgot-password")]
+    [EnableRateLimiting("AuthStrict")]
+    public async Task<ActionResult> ForgotPassword(
+        ForgotPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("POST /api/v1/auth/forgot-password called");
+        await _authService.ForgotPasswordAsync(request.Email, cancellationToken);
+        // Always return success to prevent email enumeration
+        return Ok(new { message = "If the email exists, a reset link has been sent." });
+    }
+
+    /// <summary>
+    /// Resets a user's password using a valid reset token.
+    /// </summary>
+    /// <param name="request">The reset token and new password.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK on successful password reset.</returns>
+    /// <response code="200">Password reset successfully.</response>
+    /// <response code="400">Invalid, expired, or already-used token.</response>
+    [HttpPost("reset-password")]
+    [EnableRateLimiting("AuthStrict")]
+    public async Task<ActionResult> ResetPassword(
+        ResetPasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("POST /api/v1/auth/reset-password called");
+        try
+        {
+            await _authService.ResetPasswordAsync(request.Token, request.NewPassword, cancellationToken);
+            _logger.LogInformation("Password reset successfully");
+            return Ok(new { message = "Password reset successfully. You can now sign in with your new password." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Password reset failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
     }
 
     /// <summary>

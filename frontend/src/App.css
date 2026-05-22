@@ -122,6 +122,19 @@ input:focus {
   background: #eef3f7;
   color: #253247;
 }
+.link-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #1a6d9e;
+  text-decoration: underline;
+  font-size: inherit;
+  padding: 0;
+  text-align: left;
+}
+.link-button:hover {
+  color: #134e73;
+}
 
 button:disabled {
   cursor: not-allowed;

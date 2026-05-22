@@ -360,6 +360,181 @@ public sealed class StatementService : IStatementService
             statementId, userId);
     }
 
+    /// <inheritdoc />
+    public async Task<BulkUploadResponse> UploadMultipleAsync(
+        Guid userId,
+        Guid bankAccountId,
+        IReadOnlyList<IFormFile> files,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Bulk upload requested: UserId={UserId}, FileCount={Count}", userId, files.Count);
+
+        var results = new List<SingleFileUploadResult>(files.Count);
+        var successCount = 0;
+        var failureCount = 0;
+
+        foreach (var file in files)
+        {
+            try
+            {
+                var response = await UploadAsync(userId, bankAccountId, file, cancellationToken);
+                results.Add(new SingleFileUploadResult
+                {
+                    FileName = file.FileName,
+                    Success = true,
+                    Response = response
+                });
+                successCount++;
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning("Bulk upload file failed: {FileName} - {Message}", file.FileName, ex.Message);
+                results.Add(new SingleFileUploadResult
+                {
+                    FileName = file.FileName,
+                    Success = false,
+                    ErrorMessage = ex.Message
+                });
+                failureCount++;
+            }
+        }
+
+        _logger.LogInformation("Bulk upload completed: Success={Success}, Failed={Failed}", successCount, failureCount);
+        return new BulkUploadResponse
+        {
+            Results = results.AsReadOnly(),
+            SuccessCount = successCount,
+            FailureCount = failureCount
+        };
+    }
+
+    /// <inheritdoc />
+    public async Task DeleteAsync(Guid userId, Guid statementId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Deleting statement {StatementId} for user {UserId}", statementId, userId);
+
+        var statement = await _dbExecutor.QuerySingleOrDefaultAsync<StatementUploadResponse>(
+            new CommandDefinition(
+                """
+                SELECT id AS Id, stored_file_name AS StoredFileName
+                FROM bank_statements
+                WHERE id = @Id AND user_id = @UserId
+                """,
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        if (statement is null)
+        {
+            _logger.LogWarning("Delete failed - statement {StatementId} not found for user {UserId}", statementId, userId);
+            throw new InvalidOperationException("Statement not found.");
+        }
+
+        // Delete transactions cascade through FK, so just delete the statement record
+        await _dbExecutor.ExecuteAsync(
+            new CommandDefinition(
+                "DELETE FROM bank_statements WHERE id = @Id AND user_id = @UserId",
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        // Clean up the stored file
+        var uploadsDir = GetUploadsDirectory();
+        var filePath = Path.Combine(uploadsDir, statement.StoredFileName);
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+            _logger.LogDebug("Deleted stored file: {FilePath}", filePath);
+        }
+
+        _logger.LogInformation("Statement {StatementId} deleted successfully", statementId);
+    }
+
+    /// <inheritdoc />
+    public async Task<(string FilePath, string OriginalFileName)> DownloadOriginalAsync(
+        Guid userId, Guid statementId, CancellationToken cancellationToken)
+    {
+        var statement = await _dbExecutor.QuerySingleOrDefaultAsync<dynamic>(
+            new CommandDefinition(
+                """
+                SELECT stored_file_name, original_file_name
+                FROM bank_statements
+                WHERE id = @Id AND user_id = @UserId
+                """,
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        if (statement is null)
+        {
+            throw new InvalidOperationException("Statement not found.");
+        }
+
+        var uploadsDir = GetUploadsDirectory();
+        var filePath = Path.Combine(uploadsDir, (string)statement.stored_file_name);
+
+        if (!File.Exists(filePath))
+        {
+            _logger.LogError("Original file missing for statement {StatementId}: {FilePath}", statementId, filePath);
+            throw new InvalidOperationException("Original file is no longer available.");
+        }
+
+        return (filePath, (string)statement.original_file_name);
+    }
+
+    /// <inheritdoc />
+    public async Task ArchiveAsync(Guid userId, Guid statementId, CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Archiving statement {StatementId} for user {UserId}", statementId, userId);
+
+        var rows = await _dbExecutor.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE bank_statements
+                SET status = 'archived', archived_at = NOW()
+                WHERE id = @Id AND user_id = @UserId AND status != 'archived'
+                """,
+                new { Id = statementId, UserId = userId },
+                cancellationToken: cancellationToken));
+
+        if (rows == 0)
+        {
+            _logger.LogWarning("Archive failed - statement {StatementId} not found or already archived for user {UserId}", statementId, userId);
+            throw new InvalidOperationException("Statement not found or already archived.");
+        }
+
+        _logger.LogInformation("Statement {StatementId} archived successfully", statementId);
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StatementListItemResponse>> ListArchivedAsync(
+        Guid userId, int page, int pageSize, CancellationToken cancellationToken)
+    {
+        var offset = (page - 1) * pageSize;
+        return (await _dbExecutor.QueryAsync<StatementListItemResponse>(
+            new CommandDefinition(
+                """
+                SELECT
+                    bs.id AS Id,
+                    bs.original_file_name AS OriginalFileName,
+                    bs.status AS Status,
+                    bs.uploaded_at AS UploadedAt,
+                    bs.processed_at AS ProcessedAt,
+                    bs.failed_at AS FailedAt,
+                    COALESCE(
+                        (SELECT COUNT(*)::int FROM statement_transactions st
+                         WHERE st.bank_statement_id = bs.id), 0
+                    ) AS ParsedTransactionCount,
+                    bs.size_in_bytes AS SizeInBytes,
+                    bs.error_message AS ErrorMessage,
+                    bs.bank_account_id AS BankAccountId
+                FROM bank_statements bs
+                WHERE bs.user_id = @UserId AND bs.status = 'archived'
+                ORDER BY bs.uploaded_at DESC
+                LIMIT @PageSize OFFSET @Offset
+                """,
+                new { UserId = userId, PageSize = pageSize, Offset = offset },
+                cancellationToken: cancellationToken)))
+            .AsList();
+    }
+
     private string GetUploadsDirectory()
     {
         var configuredDirectory = _configuration["FileStorage:UploadsDirectory"];

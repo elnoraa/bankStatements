@@ -89,6 +89,7 @@ public sealed class BankAccountService : IBankAccountService
                 SET
                     account_name = @AccountName,
                     bank_name = COALESCE(NULLIF(@BankName, ''), bank_name),
+                    currency = COALESCE(NULLIF(@Currency, ''), currency),
                     updated_at = NOW()
                 WHERE id = @Id AND user_id = @UserId
                 RETURNING
@@ -106,7 +107,8 @@ public sealed class BankAccountService : IBankAccountService
                     Id = accountId,
                     UserId = userId,
                     request.AccountName,
-                    request.BankName
+                    request.BankName,
+                    request.Currency
                 },
                 cancellationToken: cancellationToken));
 

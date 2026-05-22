@@ -25,6 +25,14 @@ public sealed class AuthInvalidCredentialsException : Exception
     public AuthInvalidCredentialsException() : base("Invalid email or password.")
     {
     }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AuthInvalidCredentialsException"/> class with a custom message.
+    /// </summary>
+    /// <param name="message">The error message describing the invalid credentials.</param>
+    public AuthInvalidCredentialsException(string message) : base(message)
+    {
+    }
 }
 
 /// <summary>

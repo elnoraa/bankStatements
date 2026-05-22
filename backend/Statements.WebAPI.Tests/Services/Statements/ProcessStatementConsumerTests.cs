@@ -19,6 +19,7 @@ public sealed class ProcessStatementConsumerTests
 {
     private readonly Mock<IDbExecutor> _dbExecutorMock = new();
     private readonly Mock<IStatementParser> _parserMock = new();
+    private readonly Mock<IOCREngine> _ocrEngineMock = new();
     private readonly IConfiguration _configuration;
     private readonly Mock<IHubContext<StatementProcessingHub>> _hubContextMock = new();
     private readonly Mock<ILogger<ProcessStatementConsumer>> _loggerMock = new();
@@ -33,9 +34,15 @@ public sealed class ProcessStatementConsumerTests
             })
             .Build();
 
+        // OCR engine defaults to returning null text (no OCR result)
+        _ocrEngineMock
+            .Setup(x => x.ExtractTextAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new OcrResult(null, false));
+
         _sut = new ProcessStatementConsumer(
             _dbExecutorMock.Object,
             _parserMock.Object,
+            _ocrEngineMock.Object,
             _configuration,
             _hubContextMock.Object,
             _loggerMock.Object);

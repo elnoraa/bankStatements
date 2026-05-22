@@ -28,8 +28,8 @@ ENTRYPOINT ["dotnet", "test", "Statements.WebAPI.Tests/Statements.WebAPI.Tests.c
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS runtime
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y --no-install-recommends curl && \
+# Install curl for health checks and tesseract-ocr for OCR fallback
+RUN apt-get update && apt-get install -y --no-install-recommends curl tesseract-ocr tesseract-ocr-eng && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Copy project file and restore dependencies

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,8 @@ namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("1.0")]
 public sealed class StatementsController : ControllerBase
 {
     private const long MaxUploadSizeInBytes = 10 * 1024 * 1024;
@@ -168,6 +170,156 @@ public sealed class StatementsController : ControllerBase
             _logger.LogWarning("Statement retry failed: {Message}", ex.Message);
             return BadRequest(ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Uploads multiple bank statement PDF files in a single request for processing.
+    /// </summary>
+    /// <param name="files">The PDF files to upload (max 10 MB each).</param>
+    /// <param name="bankAccountId">The bank account ID to associate with all statements.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="BulkUploadResponse"/> with per-file results.</returns>
+    [HttpPost("upload/bulk")]
+    [RequestSizeLimit(MaxUploadSizeInBytes * 10)]
+    [EnableRateLimiting("UploadStrict")]
+    public async Task<ActionResult<BulkUploadResponse>> UploadBulk(
+        [FromForm] List<IFormFile>? files,
+        [FromForm] Guid bankAccountId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        if (files is null || files.Count == 0)
+        {
+            return BadRequest("Upload at least one file.");
+        }
+
+        _logger.LogInformation("POST /api/v1/statements/upload/bulk called: UserId={UserId}, FileCount={Count}",
+            userId, files.Count);
+
+        try
+        {
+            var result = await _statementService.UploadMultipleAsync(
+                userId.Value, bankAccountId, files, cancellationToken);
+            return Ok(result);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Bulk upload failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Deletes a statement and its associated transactions.
+    /// </summary>
+    /// <param name="statementId">The statement ID to delete.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with a confirmation message.</returns>
+    [HttpDelete("{statementId}")]
+    public async Task<ActionResult> Delete(Guid statementId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        try
+        {
+            await _statementService.DeleteAsync(userId.Value, statementId, cancellationToken);
+            _logger.LogInformation("Statement {StatementId} deleted by user {UserId}", statementId, userId);
+            return Ok(new { message = "Statement deleted successfully." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Delete failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Downloads the original uploaded file for a statement.
+    /// </summary>
+    /// <param name="statementId">The statement ID.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The original PDF file.</returns>
+    [HttpGet("{statementId}/download")]
+    public async Task<IActionResult> Download(Guid statementId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        try
+        {
+            var (filePath, originalFileName) = await _statementService.DownloadOriginalAsync(
+                userId.Value, statementId, cancellationToken);
+            var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            return File(stream, "application/pdf", originalFileName);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Download failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Archives a statement, removing it from the active list but preserving data.
+    /// </summary>
+    /// <param name="statementId">The statement ID to archive.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>200 OK with a confirmation message.</returns>
+    [HttpPost("{statementId}/archive")]
+    public async Task<ActionResult> Archive(Guid statementId, CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        try
+        {
+            await _statementService.ArchiveAsync(userId.Value, statementId, cancellationToken);
+            _logger.LogInformation("Statement {StatementId} archived by user {UserId}", statementId, userId);
+            return Ok(new { message = "Statement archived successfully." });
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Archive failed: {Message}", ex.Message);
+            return BadRequest(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Lists archived statements for the current user.
+    /// </summary>
+    /// <param name="page">Page number (1-based, default 1).</param>
+    /// <param name="pageSize">Items per page (default 20).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A list of archived statement summaries.</returns>
+    [HttpGet("archived")]
+    public async Task<ActionResult<IReadOnlyList<StatementListItemResponse>>> ListArchived(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+        {
+            return Unauthorized("Authenticated user id is missing or invalid.");
+        }
+
+        var statements = await _statementService.ListArchivedAsync(userId.Value, page, pageSize, cancellationToken);
+        return Ok(statements);
     }
 
     /// <summary>

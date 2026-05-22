@@ -292,4 +292,91 @@ public sealed class AuthControllerTests
 
         result.Result.Should().BeOfType<BadRequestObjectResult>();
     }
+
+    // ── Verify Email ───────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that a valid token returns 200 OK.
+    /// </summary>
+    [Fact]
+    public async Task VerifyEmail_WithValidToken_ReturnsOk()
+    {
+        var request = new VerifyEmailRequest { Token = "valid-token" };
+
+        _authServiceMock
+            .Setup(x => x.VerifyEmailAsync("valid-token", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.VerifyEmail(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// Verifies that an invalid token returns 400 Bad Request.
+    /// </summary>
+    [Fact]
+    public async Task VerifyEmail_WithInvalidToken_ReturnsBadRequest()
+    {
+        var request = new VerifyEmailRequest { Token = "invalid-token" };
+
+        _authServiceMock
+            .Setup(x => x.VerifyEmailAsync("invalid-token", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Invalid verification token."));
+
+        var result = await _sut.VerifyEmail(request, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
+
+    // ── Forgot Password ────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that a valid email returns 200 OK (always returns success to prevent enumeration).
+    /// </summary>
+    [Fact]
+    public async Task ForgotPassword_ReturnsOkAlways()
+    {
+        var request = new ForgotPasswordRequest { Email = "test@example.com" };
+
+        var result = await _sut.ForgotPassword(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    // ── Reset Password ─────────────────────────────────────────
+
+    /// <summary>
+    /// Verifies that a valid reset token and password returns 200 OK.
+    /// </summary>
+    [Fact]
+    public async Task ResetPassword_WithValidToken_ReturnsOk()
+    {
+        var request = new ResetPasswordRequest { Token = "valid-token", NewPassword = "NewSecureP@ss1" };
+
+        _authServiceMock
+            .Setup(x => x.ResetPasswordAsync("valid-token", "NewSecureP@ss1", It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
+
+        var result = await _sut.ResetPassword(request, CancellationToken.None);
+
+        result.Should().BeOfType<OkObjectResult>();
+    }
+
+    /// <summary>
+    /// Verifies that an invalid reset token returns 400 Bad Request.
+    /// </summary>
+    [Fact]
+    public async Task ResetPassword_WithInvalidToken_ReturnsBadRequest()
+    {
+        var request = new ResetPasswordRequest { Token = "expired-token", NewPassword = "NewSecureP@ss1" };
+
+        _authServiceMock
+            .Setup(x => x.ResetPasswordAsync("expired-token", "NewSecureP@ss1", It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("Reset token has expired."));
+
+        var result = await _sut.ResetPassword(request, CancellationToken.None);
+
+        result.Should().BeOfType<BadRequestObjectResult>();
+    }
 }

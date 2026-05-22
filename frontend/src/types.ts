@@ -72,3 +72,6 @@ export type SpendingSummary = {
 
 export const TOTAL_ID = '__total__';
 export const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5213';
+
+/** View states for the auth flow beyond login/register. */
+export type AuthView = 'login' | 'register' | 'forgot-password' | 'verify-email' | 'email-sent';

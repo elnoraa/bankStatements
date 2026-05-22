@@ -15,6 +15,11 @@ using Statements.WebAPI.Services.BankAccounts;
 using Statements.WebAPI.Services.Messaging;
 using Statements.WebAPI.Services.Export;
 using Statements.WebAPI.Services.Statements;
+using Statements.WebAPI.Services.Email;
+using Statements.WebAPI.Services.Audit;
+using Statements.WebAPI.Services.Currency;
+using Microsoft.Extensions.Options;
+using Asp.Versioning;
 
 // Register Dapper type handlers for DateOnly (required for Npgsql compatibility)
 
@@ -47,6 +52,13 @@ var jwtOptions = builder.Configuration.GetSection("Jwt").Get<JwtOptions>() ?? ne
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddControllers();
+builder.Services.AddApiVersioning(options =>
+{
+    options.DefaultApiVersion = new ApiVersion(1, 0);
+    options.AssumeDefaultVersionWhenUnspecified = true;
+    options.ReportApiVersions = true;
+    options.ApiVersionReader = new UrlSegmentApiVersionReader();
+});
 builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
 {
@@ -140,17 +152,38 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection("Jwt"));
 builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailVerificationService, EmailVerificationService>();
 builder.Services.AddSingleton<IExternalAuthValidator, ExternalAuthValidator>();
 builder.Services.AddHttpClient("external-auth");
 builder.Services.AddScoped<IBankAccountService, BankAccountService>();
 builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddScoped<IAnalysisService, AnalysisService>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
+builder.Services.AddScoped<IRecurringTransactionService, RecurringTransactionService>();
+builder.Services.AddScoped<ISavingGoalService, SavingGoalService>();
+builder.Services.AddScoped<ICashflowForecastService, CashflowForecastService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
 builder.Services.AddScoped<ICsvExportService, CsvExportService>();
 builder.Services.AddTransient<IStatementParser, PdfStatementParser>();
+builder.Services.AddSingleton<IOCREngine, TesseractOcrEngine>();
 builder.Services.Configure<ClamAvOptions>(builder.Configuration.GetSection(ClamAvOptions.SectionName));
 builder.Services.AddSingleton<IVirusScanService, ClamAvVirusScanService>();
+
+// Email (conditional: file output for dev, SMTP for production)
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
+builder.Services.AddSingleton<IEmailService>(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<EmailOptions>>();
+    if (options.Value.UseFileOutput)
+    {
+        return ActivatorUtilities.CreateInstance<FileEmailService>(sp);
+    }
+    return ActivatorUtilities.CreateInstance<SmtpEmailService>(sp);
+});
+
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.Configure<CurrencyOptions>(builder.Configuration.GetSection(CurrencyOptions.SectionName));
+builder.Services.AddHttpClient<ICurrencyConverter, CurrencyConverter>();
 
 // RabbitMQ for background statement processing
 builder.Services.AddSingleton<IMessagePublisher, RabbitMqPublisher>();

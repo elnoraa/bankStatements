@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -10,7 +11,8 @@ namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/[controller]")]
+[Route("api/v{version:apiVersion}/[controller]")]
+[ApiVersion("1.0")]
 public sealed class AnalysisController : ControllerBase
 {
     private readonly IAnalysisService _analysisService;
@@ -101,6 +103,91 @@ public sealed class AnalysisController : ControllerBase
             userId.Value, bankAccountId, from, to, cancellationToken);
 
         return File(csvBytes, "text/csv", $"transactions-{DateTime.UtcNow:yyyyMMdd}.csv");
+    }
+
+    /// <summary>
+    /// Gets transactions with pagination support.
+    /// </summary>
+    [HttpGet("transactions")]
+    public async Task<ActionResult<PaginatedTransactionsResponse>> GetTransactions(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] DateOnly? from,
+        [FromQuery] DateOnly? to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 20;
+        if (pageSize > 100) pageSize = 100;
+
+        var result = await _analysisService.GetTransactionsAsync(
+            userId.Value, bankAccountId, from, to, page, pageSize, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets spending trends aggregated by period.
+    /// </summary>
+    [HttpGet("trends")]
+    public async Task<ActionResult<SpendingTrendResponse>> GetTrends(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] string period = "monthly",
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var validPeriods = new[] { "monthly", "quarterly", "yearly" };
+        if (!validPeriods.Contains(period.ToLowerInvariant()))
+        {
+            return BadRequest("Period must be one of: monthly, quarterly, yearly.");
+        }
+
+        var result = await _analysisService.GetSpendingTrendsAsync(
+            userId.Value, bankAccountId, period, from, to, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets detected recurring transactions.
+    /// </summary>
+    [HttpGet("recurring")]
+    public async Task<ActionResult<IReadOnlyList<RecurringTransactionResponse>>> GetRecurring(
+        [FromQuery] Guid? bankAccountId,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        // Delegate to a RecurringTransactionService via the analysis service or directly
+        var result = await HttpContext.RequestServices
+            .GetRequiredService<IRecurringTransactionService>()
+            .GetRecurringTransactionsAsync(userId.Value, bankAccountId, cancellationToken);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Gets a cash flow forecast for the specified number of months.
+    /// </summary>
+    [HttpGet("forecast")]
+    public async Task<ActionResult<CashflowForecastResponse>> GetForecast(
+        [FromQuery] Guid? bankAccountId,
+        [FromQuery] int months = 3,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        var result = await HttpContext.RequestServices
+            .GetRequiredService<ICashflowForecastService>()
+            .GetForecastAsync(userId.Value, bankAccountId, months, cancellationToken);
+        return Ok(result);
     }
 
     private Guid? GetCurrentUserId()

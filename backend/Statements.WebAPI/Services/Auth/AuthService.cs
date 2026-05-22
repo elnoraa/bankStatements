@@ -19,6 +19,7 @@ public sealed class AuthService : IAuthService
     private readonly IJwtTokenService _jwtTokenService;
     private readonly JwtOptions _jwtOptions;
     private readonly IExternalAuthValidator _externalAuthValidator;
+    private readonly IEmailVerificationService _emailVerificationService;
     private readonly ILogger<AuthService> _logger;
 
     /// <summary>
@@ -30,6 +31,7 @@ public sealed class AuthService : IAuthService
     /// <param name="jwtTokenService">Service for creating JWT access tokens.</param>
     /// <param name="jwtOptions">JWT configuration options.</param>
     /// <param name="externalAuthValidator">Validator for external OAuth/OpenID tokens.</param>
+    /// <param name="emailVerificationService">Service for email verification and password reset.</param>
     /// <param name="logger">Logger instance.</param>
     public AuthService(
         IDbExecutor dbExecutor,
@@ -38,6 +40,7 @@ public sealed class AuthService : IAuthService
         IJwtTokenService jwtTokenService,
         IOptions<JwtOptions> jwtOptions,
         IExternalAuthValidator externalAuthValidator,
+        IEmailVerificationService emailVerificationService,
         ILogger<AuthService> logger)
     {
         _dbExecutor = dbExecutor;
@@ -46,6 +49,7 @@ public sealed class AuthService : IAuthService
         _jwtTokenService = jwtTokenService;
         _jwtOptions = jwtOptions.Value;
         _externalAuthValidator = externalAuthValidator;
+        _emailVerificationService = emailVerificationService;
         _logger = logger;
     }
 
@@ -233,6 +237,9 @@ public sealed class AuthService : IAuthService
 
         _logger.LogDebug("Default bank account created for user {UserId}", user.Id);
 
+        // Send email verification
+        await _emailVerificationService.SendVerificationEmailAsync(user.Id, email, cancellationToken);
+
         return await CreateAuthResponseAsync(user, cancellationToken);
     }
 
@@ -290,6 +297,13 @@ public sealed class AuthService : IAuthService
             }
 
             throw new AuthInvalidCredentialsException();
+        }
+
+        // Block login if email is not verified (for password-based users)
+        if (!user.EmailVerified)
+        {
+            _logger.LogWarning("Login rejected for email: {Email} - email not verified", email);
+            throw new AuthInvalidCredentialsException("Please verify your email address before signing in. Check your inbox for the verification email.");
         }
 
         // Reset failed attempts on successful login
@@ -366,6 +380,24 @@ public sealed class AuthService : IAuthService
                 cancellationToken: cancellationToken));
 
         _logger.LogDebug("Refresh token revoked");
+    }
+
+    /// <inheritdoc />
+    public async Task VerifyEmailAsync(string token, CancellationToken cancellationToken)
+    {
+        await _emailVerificationService.VerifyEmailAsync(token, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task ForgotPasswordAsync(string email, CancellationToken cancellationToken)
+    {
+        await _emailVerificationService.SendPasswordResetEmailAsync(email, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task ResetPasswordAsync(string token, string newPassword, CancellationToken cancellationToken)
+    {
+        await _emailVerificationService.ResetPasswordAsync(token, newPassword, cancellationToken);
     }
 
     /// <summary>

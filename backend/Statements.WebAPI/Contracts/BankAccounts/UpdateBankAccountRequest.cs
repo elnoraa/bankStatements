@@ -18,4 +18,10 @@ public sealed class UpdateBankAccountRequest
     /// </summary>
     [MaxLength(120)]
     public string? BankName { get; init; }
+
+    /// <summary>
+    /// Optional updated currency code (e.g., "AUD", "USD", "EUR").
+    /// </summary>
+    [MaxLength(3)]
+    public string? Currency { get; init; }
 }

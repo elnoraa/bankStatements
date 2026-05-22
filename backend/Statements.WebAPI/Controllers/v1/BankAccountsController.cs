@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
@@ -9,7 +10,8 @@ namespace Statements.WebAPI.Controllers.v1;
 
 [ApiController]
 [Authorize]
-[Route("api/v1/bank-accounts")]
+[Route("api/v{version:apiVersion}/bank-accounts")]
+[ApiVersion("1.0")]
 public sealed class BankAccountsController : ControllerBase
 {
     private readonly IBankAccountService _bankAccountService;

@@ -59,7 +59,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
             Options.Create(JwtOptions),
             Mock.Of<ILogger<JwtTokenService>>());
 
-        // System under test — real DB, real hasher, real JWT, mocked external auth
+        // System under test — real DB, real hasher, real JWT, mocked external auth, mocked email verification
         _sut = new AuthService(
             _dbExecutor,
             connectionFactory,
@@ -67,6 +67,7 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
             jwtTokenService,
             Options.Create(JwtOptions),
             _externalAuthValidatorMock.Object,
+            Mock.Of<IEmailVerificationService>(),
             Mock.Of<ILogger<AuthService>>());
     }
 
@@ -160,9 +161,15 @@ public sealed class AuthServiceIntegrationTests : IClassFixture<DatabaseFixture>
     [Fact]
     public async Task LoginAsync_WithValidCredentials_ReturnsAuthResponse()
     {
-        // Arrange: register a user first
+        // Arrange: register a user first, then mark email as verified
         var registerRequest = new RegisterRequest { Email = "loginuser@test.com", DisplayName = "Login User", Password = "SecureP@ss1" };
         await _sut.RegisterAsync(registerRequest, CancellationToken.None);
+
+        // Manually verify email for integration test
+        await _dbExecutor.ExecuteAsync(
+            new CommandDefinition(
+                "UPDATE app_users SET email_verified = TRUE WHERE email = @Email",
+                new { Email = "loginuser@test.com" }));
 
         // Act: login with same credentials
         var loginRequest = new LoginRequest { Email = "loginuser@test.com", Password = "SecureP@ss1" };

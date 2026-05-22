@@ -98,6 +98,13 @@ services:
       - ExternalProviders__Auth0__Audience=${ExternalProviders__Auth0__Audience:-}
       - ExternalProviders__Google__ClientId=${ExternalProviders__Google__ClientId:-}
       - ExternalProviders__Google__ClientSecret=${ExternalProviders__Google__ClientSecret:-}
+      - Email__UseFileOutput=${Email__UseFileOutput:-true}
+      - Email__FromAddress=${Email__FromAddress:-noreply@bankstatements.app}
+      - Email__FromName=${Email__FromName:-Bank Statements}
+      - Email__SmtpHost=${Email__SmtpHost:-localhost}
+      - Email__SmtpPort=${Email__SmtpPort:-587}
+      - Email__SmtpUsername=${Email__SmtpUsername:-}
+      - Email__SmtpPassword=${Email__SmtpPassword:-}
       - ClamAv__Host=${CLAMAV_HOST}
       - ClamAv__Port=${CLAMAV_PORT}
       - RabbitMq__Host=rabbitmq
