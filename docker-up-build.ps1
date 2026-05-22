@@ -17,5 +17,5 @@ docker compose run --rm test-integration
 # Testcontainers containers stay running after tests exit (RYUK is disabled),
 # so force-remove them before the final prune of any stragglers
 Write-Host "=== Cleaning up Testcontainers containers ===" -ForegroundColor Cyan
-docker ps -q --filter "label=org.testcontainers=true" | ForEach-Object { docker rm -f $_ }
-docker container prune --force --filter "label=org.testcontainers=true"
+docker ps -q --filter "label=org.testcontainers=true" | ForEach-Object { docker rm -f $_ 2>$null }
+docker container prune --force --filter "label=org.testcontainers=true" 2>&1 | Out-Null

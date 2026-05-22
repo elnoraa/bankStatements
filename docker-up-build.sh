@@ -19,4 +19,4 @@ docker compose run --rm test-integration
 # so force-remove them before the final prune of any stragglers
 echo "=== Cleaning up Testcontainers containers ==="
 docker rm -f $(docker ps -q --filter "label=org.testcontainers=true") 2>/dev/null
-docker container prune --force --filter "label=org.testcontainers=true"
+docker container prune --force --filter "label=org.testcontainers=true" > /dev/null 2>&1

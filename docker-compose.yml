@@ -110,6 +110,7 @@ services:
       - RabbitMq__Host=rabbitmq
       - RabbitMq__Username=${RABBITMQ_DEFAULT_USER:-guest}
       - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS:-guest}
+      - ASPNETCORE_HTTP_PORTS=
       - TZ=Australia/Sydney
     volumes:
       - ./backend/Statements.WebAPI:/app
