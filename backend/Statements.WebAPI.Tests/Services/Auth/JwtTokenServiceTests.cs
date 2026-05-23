@@ -63,10 +63,11 @@ public sealed class JwtTokenServiceTests
     public void CreateAccessToken_WithValidUser_ReturnsTokenWithCorrectExpiry()
     {
         var sut = CreateSut(ValidOptions);
+        var expectedExpiry = DateTimeOffset.UtcNow.AddMinutes(ValidOptions.AccessTokenMinutes);
 
         var result = sut.CreateAccessToken(TestUser);
 
-        result.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddMinutes(ValidOptions.AccessTokenMinutes), TimeSpan.FromSeconds(5));
+        result.ExpiresAt.Should().BeCloseTo(expectedExpiry, TimeSpan.FromSeconds(3));
     }
 
     /// <summary>

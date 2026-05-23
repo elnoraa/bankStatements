@@ -19,6 +19,7 @@ using Statements.WebAPI.Services.Statements;
 using Statements.WebAPI.Services.Email;
 using Statements.WebAPI.Services.Audit;
 using Statements.WebAPI.Services.Currency;
+using Statements.WebAPI.Services.Basiq;
 using Microsoft.Extensions.Options;
 using Asp.Versioning;
 
@@ -149,6 +150,18 @@ builder.Services.AddRateLimiter(rateLimiterOptions =>
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
                 QueueLimit = 0
             }));
+
+    // Basiq: connection refresh/initiate — 5 req / 15 min per IP
+    rateLimiterOptions.AddPolicy("BasiqRefresh", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 5,
+                Window = TimeSpan.FromMinutes(15),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            }));
 });
 builder.Services.AddSingleton<IDbConnectionFactory, NpgsqlConnectionFactory>();
 builder.Services.AddScoped<IDbExecutor, DapperDbExecutor>();
@@ -188,6 +201,17 @@ builder.Services.AddSingleton<IEmailService>(sp =>
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.Configure<CurrencyOptions>(builder.Configuration.GetSection(CurrencyOptions.SectionName));
 builder.Services.AddHttpClient<ICurrencyConverter, CurrencyConverter>();
+
+// Basiq open banking
+builder.Services.Configure<BasiqOptions>(builder.Configuration.GetSection(BasiqOptions.SectionName));
+builder.Services.AddHttpClient<IBasiqApiClient, BasiqApiClient>((sp, client) =>
+{
+    var options = sp.GetRequiredService<IOptions<BasiqOptions>>();
+    client.BaseAddress = new Uri(options.Value.ApiBaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+builder.Services.AddScoped<IBasiqService, BasiqService>();
+builder.Services.AddHostedService<BasiqTransactionSyncService>();
 
 // RabbitMQ for background statement processing
 builder.Services.AddSingleton<IMessagePublisher, RabbitMqPublisher>();
@@ -307,7 +331,8 @@ static void ValidateConfiguration(IConfiguration configuration, Microsoft.Extens
     var requiredVars = new (string Key, string Name)[]
     {
         ("Jwt:Secret", "Jwt__Secret"),
-        ("ConnectionStrings:DefaultConnection", "ConnectionStrings__DefaultConnection")
+        ("ConnectionStrings:DefaultConnection", "ConnectionStrings__DefaultConnection"),
+        ("Basiq:ApiKey", "Basiq__ApiKey")
     };
 
     var placeholderVars = new (string Key, string Placeholder)[]

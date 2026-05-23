@@ -28,7 +28,7 @@ public sealed class TesseractOcrEngine : IOCREngine
                 var psi = new ProcessStartInfo
                 {
                     FileName = "tesseract",
-                    Arguments = $"\"{filePath}\" \"{tempOutput}\" -l eng 2>&1",
+                    Arguments = $"\"{filePath}\" \"{tempOutput}\" -l eng",
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
                     UseShellExecute = false,

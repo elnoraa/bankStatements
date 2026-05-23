@@ -110,20 +110,10 @@ public sealed class ProcessStatementConsumer
                         "OCR fallback extracted text for statement {StatementId}, re-attempting parse",
                         message.StatementId);
 
-                    // Write OCR text to a temp file and re-parse
-                    var tempOcrFile = Path.GetTempFileName() + ".pdf";
-                    try
-                    {
-                        await File.WriteAllTextAsync(tempOcrFile, ocrResult.Text, cancellationToken);
-                        transactions = _statementParser.Parse(tempOcrFile);
-                        _logger.LogInformation(
-                            "OCR fallback parsed {Count} transactions from statement {StatementId}",
-                            transactions.Count, message.StatementId);
-                    }
-                    finally
-                    {
-                        if (File.Exists(tempOcrFile)) File.Delete(tempOcrFile);
-                    }
+                    transactions = _statementParser.ParseText(ocrResult.Text);
+                    _logger.LogInformation(
+                        "OCR fallback parsed {Count} transactions from statement {StatementId}",
+                        transactions.Count, message.StatementId);
                 }
             }
         }

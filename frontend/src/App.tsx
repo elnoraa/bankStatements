@@ -9,6 +9,7 @@ import { SpendingBreakdown } from './components/SpendingBreakdown';
 import { RecentActivity } from './components/RecentActivity';
 import { StatementManager } from './components/StatementManager';
 import { BudgetManager } from './components/BudgetManager';
+import { BasiqPanel } from './components/BasiqPanel';
 import { useStatementHub, type StatementStatusUpdate } from './hooks/useStatementHub';
 import type { AuthMode, AuthResponse, AuthView, BankAccount, StatementUploadResponse, SpendingSummary } from './types';
 import { apiBaseUrl, TOTAL_ID } from './types';
@@ -47,6 +48,7 @@ function App() {
 
   // Analysis state
   const [summary, setSummary] = useState<SpendingSummary | null>(null);
+  const [statementRefreshKey, setStatementRefreshKey] = useState(0);
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [isUploadLoading, setIsUploadLoading] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
@@ -364,7 +366,7 @@ function App() {
       const result = await response.json() as StatementUploadResponse;
       setUpload({ ...result });
       setPendingStatementId(result.id);
-      setStatementStatus('uploaded');
+      setStatementStatus(result.status);
       setSelectedFile(null);
     } catch (error) {
       setAppMessage(error instanceof Error ? error.message : 'Statement upload failed.');
@@ -393,6 +395,8 @@ function App() {
           uploadedAt: data.uploadedAt,
           parsedTransactionCount: data.parsedTransactionCount ?? 0,
         });
+
+        setStatementRefreshKey((k) => k + 1);
 
         if (data.status === 'processed') {
           setPendingStatementId(null);
@@ -526,6 +530,8 @@ function App() {
     setParsedTransactionCount(update.parsedTransactionCount ?? 0);
     setUpload((prev) => prev ? { ...prev, status: update.status, parsedTransactionCount: update.parsedTransactionCount ?? 0 } : prev);
     setPendingStatementId(null);
+
+    setStatementRefreshKey((k) => k + 1);
 
     if (update.status === 'processed') {
       void loadSummary();
@@ -666,6 +672,7 @@ function App() {
           categories={categories}
           authedFetch={authedFetch}
           onTransactionUpdated={handleTransactionUpdated}
+          selectedAccountId={selectedAccountId}
           headerActions={
             <button className="secondary-button" type="button" onClick={() => void handleDownloadCsv()} title="Download as CSV">
               Download CSV
@@ -674,7 +681,9 @@ function App() {
         />
       </section>
 
-      <StatementManager authedFetch={authedFetch} />
+      <StatementManager authedFetch={authedFetch} refreshKey={statementRefreshKey} onDelete={() => void loadSummary()} />
+
+      <BasiqPanel authedFetch={authedFetch} />
 
       <BudgetManager
         categories={categories}

@@ -39,23 +39,50 @@ public sealed partial class PdfStatementParser : IStatementParser
 
         foreach (var page in document.GetPages())
         {
-            var lines = page.Text
-                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var words = page.GetWords().ToList();
 
-            _logger.LogTrace("Page {PageNumber}: {LineCount} lines", page.Number, lines.Length);
-
-            foreach (var line in lines)
+            if (words.Count == 0)
             {
-                var transaction = TryParseLine(line);
-
-                if (transaction is not null)
-                {
-                    transactions.Add(transaction);
-                }
+                continue;
             }
+
+            // Group words by Y position (same table row), sort top-to-bottom, left-to-right
+            var lines = words
+                .GroupBy(w => Math.Round(w.BoundingBox.Bottom, 1))
+                .OrderByDescending(g => g.Key)
+                .Select(g => string.Join(" ", g.OrderBy(w => w.BoundingBox.Left).Select(w => w.Text)))
+                .ToArray();
+
+            transactions.AddRange(ParseLines(lines));
         }
 
         _logger.LogInformation("Parsed {TransactionCount} transactions from {FilePath}", transactions.Count, filePath);
+        return transactions;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ParsedStatementTransaction> ParseText(string text)
+    {
+        var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var transactions = ParseLines(lines);
+        _logger.LogInformation("Parsed {TransactionCount} transactions from text ({LineCount} lines)", transactions.Count, lines.Length);
+        return transactions;
+    }
+
+    internal static IReadOnlyList<ParsedStatementTransaction> ParseLines(string[] lines)
+    {
+        var transactions = new List<ParsedStatementTransaction>();
+
+        foreach (var line in lines)
+        {
+            var transaction = TryParseLine(line);
+
+            if (transaction is not null)
+            {
+                transactions.Add(transaction);
+            }
+        }
+
         return transactions;
     }
 
@@ -68,7 +95,13 @@ public sealed partial class PdfStatementParser : IStatementParser
     {
         var dateMatch = DateAtStartRegex().Match(line);
 
-        if (!dateMatch.Success || !TryParseDate(dateMatch.Groups["date"].Value, out var transactionDate))
+        if (!dateMatch.Success)
+        {
+            return null;
+        }
+
+        var dateValue = dateMatch.Groups["date"].Value;
+        if (!TryParseDate(dateValue, out var transactionDate) && !TryParseShortDate(dateValue, out transactionDate))
         {
             return null;
         }
@@ -104,7 +137,11 @@ public sealed partial class PdfStatementParser : IStatementParser
             description = "Statement transaction";
         }
 
-        var transactionType = InferTransactionType(description, rawAmount);
+        // CR/DR suffix overrides type inference
+        var rawSuffix = amountMatch.Value.Trim().ToUpperInvariant();
+        var transactionType = rawSuffix.EndsWith("CR")
+            ? "credit"
+            : InferTransactionType(description, rawAmount);
         var amount = Math.Abs(rawAmount);
         var categoryName = InferCategory(description, transactionType);
 
@@ -141,12 +178,44 @@ public sealed partial class PdfStatementParser : IStatementParser
             out date);
     }
 
+    internal static bool TryParseShortDate(string value, out DateOnly date)
+    {
+        // Handle "DD MMM" format (e.g. "10 DEC") — infer the year:
+        // try current year first; if the result is after today, use previous year
+        var formats = new[] { "d MMM yyyy", "dd MMM yyyy", "d MMMM yyyy", "dd MMMM yyyy" };
+        var thisYear = DateTime.UtcNow.Year;
+
+        if (DateOnly.TryParseExact($"{value} {thisYear}", formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+        {
+            if (date > DateOnly.FromDateTime(DateTime.UtcNow))
+            {
+                date = date.AddYears(-1);
+            }
+            return true;
+        }
+
+        if (DateOnly.TryParseExact($"{value} {thisYear - 1}", formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out date))
+        {
+            return true;
+        }
+
+        date = default;
+        return false;
+    }
+
     internal static bool TryParseMoney(string value, out decimal amount)
     {
         var cleaned = value
             .Replace("$", string.Empty, StringComparison.Ordinal)
             .Replace(",", string.Empty, StringComparison.Ordinal)
-            .Trim();
+            .Trim()
+            .ToUpperInvariant();
+
+        // Strip CR/DR suffix before parsing the number
+        if (cleaned.EndsWith("CR") || cleaned.EndsWith("DR"))
+        {
+            cleaned = cleaned[..^2].TrimEnd();
+        }
 
         var isNegative = cleaned.StartsWith('(') && cleaned.EndsWith(')');
         cleaned = cleaned.Trim('(', ')');
@@ -172,7 +241,7 @@ public sealed partial class PdfStatementParser : IStatementParser
         }
 
         var normalized = description.ToLowerInvariant();
-        var creditWords = new[] { "salary", "payroll", "wage", "refund", "interest", "deposit", "credit" };
+        var creditWords = new[] { "salary", "payroll", "wage", "refund", "interest", "deposit", "credit", "transfer" };
 
         return creditWords.Any(normalized.Contains)
             ? "credit"
@@ -236,9 +305,9 @@ public sealed partial class PdfStatementParser : IStatementParser
         return "Uncategorised";
     }
 
-    [GeneratedRegex(@"^(?<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2})\s+(?<rest>.+)$", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"^(?<date>\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{4}[/-]\d{1,2}[/-]\d{1,2}|\d{1,2}\s+(?:JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC))\s+(?<rest>.+)$", RegexOptions.IgnoreCase, 1000)]
     private static partial Regex DateAtStartRegex();
 
-    [GeneratedRegex(@"\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?|\(?-?\$?\d+\.\d{2}\)?", RegexOptions.None, 1000)]
+    [GeneratedRegex(@"\(?-?\$?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?\s*(?:CR|DR)?|\(?-?\$?\d+\.\d{2}\)?\s*(?:CR|DR)?", RegexOptions.None, 1000)]
     private static partial Regex MoneyRegex();
 }

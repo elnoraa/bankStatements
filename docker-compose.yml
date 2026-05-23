@@ -110,6 +110,8 @@ services:
       - RabbitMq__Host=rabbitmq
       - RabbitMq__Username=${RABBITMQ_DEFAULT_USER:-guest}
       - RabbitMq__Password=${RABBITMQ_DEFAULT_PASS:-guest}
+      - Basiq__ApiKey=${Basiq__ApiKey:-}
+      - Basiq__ConsentRedirectUrl=${Basiq__ConsentRedirectUrl:-}
       - ASPNETCORE_HTTP_PORTS=
       - TZ=Australia/Sydney
     volumes:

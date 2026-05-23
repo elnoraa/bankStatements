@@ -1,5 +1,6 @@
 .budget-manager {
-  margin-top: 20px;
+  margin-top: 24px;
+  padding: 24px;
 }
 
 .budget-month-picker {
@@ -27,14 +28,14 @@
 .budget-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .budget-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
+  padding: 12px 14px;
   background: #f8fafc;
   border-radius: 6px;
   gap: 8px;

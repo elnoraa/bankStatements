@@ -1,6 +1,7 @@
-import type { RefObject } from 'react';
+import { useState, type RefObject } from 'react';
 import type { BankAccount } from '../types';
 import { TOTAL_ID } from '../types';
+import { ConfirmDialog } from './ConfirmDialog';
 
 interface AccountToolbarProps {
   accounts: BankAccount[];
@@ -25,6 +26,8 @@ export function AccountToolbar({
   editInputRef, handleStartRename, handleSaveRename, cancelRename,
   handleDeleteAccount, handleAddAccount, isAccountsLoading, accountsMessage,
 }: AccountToolbarProps) {
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState<BankAccount | null>(null);
+
   return (
     <div className="account-bar">
       <label className="account-bar-label">Account:</label>
@@ -81,11 +84,7 @@ export function AccountToolbar({
                     className="account-action-btn account-action-delete"
                     type="button"
                     title="Delete account and all its statements"
-                    onClick={() => {
-                      if (window.confirm(`Delete "${account.accountName}" and all its statements?`)) {
-                        void handleDeleteAccount(account.id);
-                      }
-                    }}
+                    onClick={() => setConfirmDeleteAccount(account)}
                   >
                     ×
                   </button>
@@ -105,6 +104,19 @@ export function AccountToolbar({
         + Add account
       </button>
       {accountsMessage && <p className="error-text account-message">{accountsMessage}</p>}
+
+      <ConfirmDialog
+        open={confirmDeleteAccount !== null}
+        title="Delete account"
+        message={`Delete "${confirmDeleteAccount?.accountName ?? ''}" and all its statements? This cannot be undone.`}
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (confirmDeleteAccount) await handleDeleteAccount(confirmDeleteAccount.id);
+          setConfirmDeleteAccount(null);
+        }}
+        onCancel={() => setConfirmDeleteAccount(null)}
+        destructive={true}
+      />
     </div>
   );
 }

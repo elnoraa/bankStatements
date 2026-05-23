@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiBaseUrl } from '../types';
+import { ConfirmDialog } from './ConfirmDialog';
 import '../StatementManager.css';
 
 interface StatementListItem {
@@ -15,12 +16,15 @@ interface StatementListItem {
 
 interface StatementManagerProps {
   authedFetch: (url: string, options?: RequestInit) => Promise<Response>;
+  refreshKey?: number;
+  onDelete?: () => void;
 }
 
-export function StatementManager({ authedFetch }: StatementManagerProps) {
+export function StatementManager({ authedFetch, refreshKey, onDelete }: StatementManagerProps) {
   const [statements, setStatements] = useState<StatementListItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const loadStatements = useCallback(async () => {
     setIsLoading(true);
@@ -37,7 +41,7 @@ export function StatementManager({ authedFetch }: StatementManagerProps) {
 
   useEffect(() => {
     void loadStatements();
-  }, [loadStatements]);
+  }, [loadStatements, refreshKey]);
 
   async function handleRetry(statementId: string) {
     setMessage('');
@@ -52,6 +56,21 @@ export function StatementManager({ authedFetch }: StatementManagerProps) {
       );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Retry failed.');
+    }
+  }
+
+  async function handleDelete(statementId: string) {
+    try {
+      const response = await authedFetch(`${apiBaseUrl}/api/v1/statements/${statementId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error(await response.text());
+      setStatements((prev) => prev.filter((s) => s.id !== statementId));
+      setConfirmDeleteId(null);
+      onDelete?.();
+    } catch (error) {
+      setConfirmDeleteId(null);
+      setMessage(error instanceof Error ? error.message : 'Failed to delete statement.');
     }
   }
 
@@ -102,10 +121,32 @@ export function StatementManager({ authedFetch }: StatementManagerProps) {
                   Retry
                 </button>
               )}
+              {s.status !== 'processing' && (
+                <button
+                  className="delete-btn"
+                  type="button"
+                  title="Delete statement"
+                  onClick={() => setConfirmDeleteId(s.id)}
+                >
+                  ×
+                </button>
+              )}
             </div>
           </div>
         ))}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        title="Delete statement"
+        message="Delete this statement and all its transactions? This cannot be undone."
+        confirmLabel="Delete"
+        onConfirm={async () => {
+          if (confirmDeleteId) await handleDelete(confirmDeleteId);
+        }}
+        onCancel={() => setConfirmDeleteId(null)}
+        destructive={true}
+      />
 
       {message && <p className="error-text">{message}</p>}
     </section>

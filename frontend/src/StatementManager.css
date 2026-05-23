@@ -1,18 +1,19 @@
 .statement-manager {
-  margin-top: 20px;
+  margin-top: 24px;
+  padding: 24px;
 }
 
 .statement-table {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .statement-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 12px;
+  padding: 12px 14px;
   background: #f8fafc;
   border-radius: 6px;
   gap: 12px;
@@ -21,7 +22,7 @@
 .statement-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   flex: 1;
 }
@@ -89,4 +90,22 @@
 
 .retry-btn:hover {
   background: #1a4a5c;
+}
+
+.delete-btn {
+  background: none;
+  color: #8a99ad;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.delete-btn:hover {
+  color: #a33b2b;
+  background: #fff5f4;
+  border-color: #e8c4c0;
 }

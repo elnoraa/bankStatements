@@ -131,7 +131,7 @@ public sealed class StatementService : IStatementService
             "Virus scan passed for {FileName} ({DurationMs}ms)",
             originalFileName, scanResult.Duration.TotalMilliseconds);
 
-        var existingStatementId = await _dbExecutor.QuerySingleOrDefaultAsync<Guid?>(
+        var existingId = await _dbExecutor.QuerySingleOrDefaultAsync<Guid?>(
             new CommandDefinition(
                 """
                 SELECT id
@@ -142,16 +142,26 @@ public sealed class StatementService : IStatementService
                 new { UserId = userId, FileHash = fileHash },
                 cancellationToken: cancellationToken));
 
-        if (existingStatementId is not null)
+        if (existingId is not null)
         {
-            _logger.LogInformation("Duplicate file detected: {FileName} already uploaded as statement {StatementId}",
-                originalFileName, existingStatementId);
+            var existingStatus = await _dbExecutor.QuerySingleOrDefaultAsync<string>(
+                new CommandDefinition(
+                    """
+                    SELECT status
+                    FROM bank_statements
+                    WHERE id = @Id
+                    """,
+                    new { Id = existingId.Value },
+                    cancellationToken: cancellationToken)) ?? "uploaded";
+
+            _logger.LogInformation("Duplicate file detected: {FileName} already uploaded as statement {StatementId} (status: {Status})",
+                originalFileName, existingId, existingStatus);
 
             File.Delete(savedPath);
 
             return new StatementUploadResponse
             {
-                Id = existingStatementId.Value,
+                Id = existingId.Value,
                 UserId = userId,
                 BankAccountId = bankAccountId,
                 OriginalFileName = originalFileName,
@@ -159,7 +169,7 @@ public sealed class StatementService : IStatementService
                 FileHash = fileHash,
                 SizeInBytes = file.Length,
                 ContentType = file.ContentType,
-                Status = "uploaded",
+                Status = existingStatus,
                 UploadedAt = DateTimeOffset.UtcNow,
                 ParsedTransactionCount = 0
             };

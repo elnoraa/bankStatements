@@ -100,7 +100,7 @@ public sealed class AuthService : IAuthService
 
         // Step 2: No external_login mapping yet. Compute the email to use
         // (fallback email ensures even users without a provider email can be identified).
-        var emailToInsert = info.Email ?? ($"{info.Provider}:{info.ProviderKey}@noemail.local");
+        var emailToInsert = info.Email ?? ($"{info.Provider}-{info.ProviderKey}@noemail.local");
         var displayName = info.DisplayName ?? info.Email ?? "";
         var normalizedEmail = NormalizeEmail(emailToInsert);
 
