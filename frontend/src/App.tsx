@@ -13,6 +13,7 @@ import { BasiqPanel } from './components/BasiqPanel';
 import { useStatementHub, type StatementStatusUpdate } from './hooks/useStatementHub';
 import type { AuthMode, AuthResponse, AuthView, BankAccount, StatementUploadResponse, SpendingSummary } from './types';
 import { apiBaseUrl, TOTAL_ID } from './types';
+import type { AuthResponse as ExternalAuthResponse } from './services/externalAuth';
 
 /** Main application component with auth flow, account management, statement upload, and spending analysis. */
 function App() {
@@ -53,6 +54,9 @@ function App() {
   const [isUploadLoading, setIsUploadLoading] = useState(false);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
   const [appMessage, setAppMessage] = useState('');
+
+  // Refresh counter to trigger transaction list reload after upload/delete
+  const [transactionRefreshKey, setTransactionRefreshKey] = useState(0);
 
   // SignalR state: becomes true when hub connection is established
   const [signalRReady, setSignalRReady] = useState(false);
@@ -401,6 +405,7 @@ function App() {
         if (data.status === 'processed') {
           setPendingStatementId(null);
           void loadSummary();
+          setTransactionRefreshKey((k) => k + 1);
         } else if (data.status === 'failed') {
           setPendingStatementId(null);
           setAppMessage(data.errorMessage ?? 'Statement processing failed.');
@@ -516,6 +521,12 @@ function App() {
     });
   }
 
+  /** Handles successful external login (Google/Auth0 SSO) by setting auth state directly. */
+  function handleExternalLogin(response: ExternalAuthResponse) {
+    accessTokenRef.current = response.accessToken;
+    setAuth(response);
+  }
+
   /** Reload summary when selected account changes */
   useEffect(() => {
     if (auth) {
@@ -535,6 +546,7 @@ function App() {
 
     if (update.status === 'processed') {
       void loadSummary();
+      setTransactionRefreshKey((k) => k + 1);
     } else if (update.status === 'failed') {
       setAppMessage(update.errorMessage ?? 'Statement processing failed.');
     }
@@ -547,6 +559,17 @@ function App() {
     () => setSignalRReady(true),
     () => setSignalRReady(false),
   );
+
+  // Auto-dismiss the upload success message after 5 seconds
+  useEffect(() => {
+    if (statementStatus === 'processed') {
+      const timer = setTimeout(() => {
+        setUpload(null);
+        setStatementStatus(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [statementStatus]);
 
   /** Signs the user out. */
   async function signOut() {
@@ -602,6 +625,7 @@ function App() {
           onForgotPassword={handleForgotPassword}
           onVerifyEmail={handleVerifyEmail}
           onResetPassword={handleResetPassword}
+          onExternalLogin={handleExternalLogin}
         />
       </main>
     );
@@ -673,6 +697,7 @@ function App() {
           authedFetch={authedFetch}
           onTransactionUpdated={handleTransactionUpdated}
           selectedAccountId={selectedAccountId}
+          refreshKey={transactionRefreshKey}
           headerActions={
             <button className="secondary-button" type="button" onClick={() => void handleDownloadCsv()} title="Download as CSV">
               Download CSV
@@ -681,7 +706,7 @@ function App() {
         />
       </section>
 
-      <StatementManager authedFetch={authedFetch} refreshKey={statementRefreshKey} onDelete={() => void loadSummary()} />
+      <StatementManager authedFetch={authedFetch} refreshKey={statementRefreshKey} onDelete={() => { void loadSummary(); setTransactionRefreshKey((k) => k + 1); }} />
 
       <BasiqPanel authedFetch={authedFetch} />
 

@@ -15,7 +15,8 @@ INSERT INTO transaction_categories (name, transaction_type) VALUES
     ('Insurance', 'debit'),
     ('Fees', 'debit'),
     ('Transfers Out', 'debit'),
-    ('Uncategorised', 'both')
+    ('Uncategorised', 'both'),
+    ('Sport', 'debit')
 ON CONFLICT (name) DO NOTHING;
 
 -- Seed a demo user account for development/testing.

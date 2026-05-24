@@ -236,6 +236,15 @@ button:disabled {
   padding: 24px;
 }
 
+.transactions-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.transactions-panel .transaction-list {
+  flex: 1;
+}
+
 .section-heading {
   display: flex;
   align-items: center;

@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from 'react';
 import { ExternalLoginButtons } from './ExternalLoginButtons';
 import type { AuthMode, AuthView } from '../types';
+import type { AuthResponse } from '../services/externalAuth';
 
 interface AuthPanelProps {
   authMode: AuthMode;
@@ -19,6 +20,7 @@ interface AuthPanelProps {
   onForgotPassword: (email: string) => Promise<void>;
   onVerifyEmail: (token: string) => Promise<void>;
   onResetPassword: (token: string, newPassword: string) => Promise<void>;
+  onExternalLogin?: (response: AuthResponse) => void;
 }
 
 export function AuthPanel({
@@ -171,7 +173,7 @@ export function AuthPanel({
         <span>or</span>
       </div>
 
-      <ExternalLoginButtons />
+      <ExternalLoginButtons onLoginSuccess={onExternalLogin} />
     </section>
   );
 }

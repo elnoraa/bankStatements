@@ -272,19 +272,10 @@ public sealed partial class PdfStatementParser : IStatementParser
             return "Transfers In";
         }
 
-        if (normalized.Contains("grocery") || normalized.Contains("supermarket") || normalized.Contains("coles") || normalized.Contains("woolworths"))
+        // Order matters: check more specific categories before generic ones
+        if (normalized.Contains("insurance") || normalized.Contains("aami") || normalized.Contains("nib ") || normalized.Contains("medibank"))
         {
-            return "Groceries";
-        }
-
-        if (normalized.Contains("restaurant") || normalized.Contains("cafe") || normalized.Contains("dining"))
-        {
-            return "Dining";
-        }
-
-        if (normalized.Contains("train") || normalized.Contains("transport") || normalized.Contains("uber") || normalized.Contains("opal"))
-        {
-            return "Transport";
+            return "Insurance";
         }
 
         if (normalized.Contains("rent"))
@@ -292,12 +283,60 @@ public sealed partial class PdfStatementParser : IStatementParser
             return "Rent";
         }
 
-        if (normalized.Contains("electric") || normalized.Contains("energy") || normalized.Contains("water") || normalized.Contains("utility"))
+        if (normalized.Contains("electric") || normalized.Contains("energy") || normalized.Contains("water") || normalized.Contains("utility") ||
+            normalized.Contains("phone") || normalized.Contains("mobile") || normalized.Contains("internet") || normalized.Contains("broadband") ||
+            normalized.Contains("telstra") || normalized.Contains("optus"))
         {
             return "Utilities";
         }
 
-        if (normalized.Contains("fee"))
+        if (normalized.Contains("grocery") || normalized.Contains("supermarket") || normalized.Contains("coles") || normalized.Contains("woolworths") ||
+            normalized.Contains("aldi") || normalized.Contains("iga ") || normalized.Contains("foodland") || normalized.Contains("food ") ||
+            normalized.Contains("butcher") || normalized.Contains("bakery"))
+        {
+            return "Groceries";
+        }
+
+        if (normalized.Contains("restaurant") || normalized.Contains("cafe") || normalized.Contains("dining") || normalized.Contains("takeaway") ||
+            normalized.Contains("mcdonald") || normalized.Contains("maccas") || normalized.Contains("kfc") || normalized.Contains("hungry jack") ||
+            normalized.Contains("pizza") || normalized.Contains("subway") || normalized.Contains("starbucks"))
+        {
+            return "Dining";
+        }
+
+        if (normalized.Contains("train") || normalized.Contains("transport") || normalized.Contains("uber") || normalized.Contains("opal") ||
+            normalized.Contains("toll") || normalized.Contains("petrol") || normalized.Contains("fuel") || normalized.Contains("service station") ||
+            normalized.Contains("parking"))
+        {
+            return "Transport";
+        }
+
+        if (normalized.Contains("doctor") || normalized.Contains("dentist") || normalized.Contains("medical") || normalized.Contains("hospital") ||
+            normalized.Contains("pharmacy") || normalized.Contains("chemist"))
+        {
+            return "Health";
+        }
+
+        if (normalized.Contains("amazon") || normalized.Contains("ebay") || normalized.Contains("target") || normalized.Contains("kmart") ||
+            normalized.Contains("big w") || normalized.Contains("bunnings") || normalized.Contains("shop ") || normalized.Contains("store"))
+        {
+            return "Shopping";
+        }
+
+        if (normalized.Contains("netflix") || normalized.Contains("disney") || normalized.Contains("spotify") || normalized.Contains("apple ") ||
+            normalized.Contains("subscription") || normalized.Contains("streaming"))
+        {
+            return "Entertainment";
+        }
+
+        if (normalized.Contains("gym") || normalized.Contains("fitness") || normalized.Contains("sport") ||
+            normalized.Contains("exercise") || normalized.Contains("nike") || normalized.Contains("adidas") ||
+            normalized.Contains("rebel"))
+        {
+            return "Sport";
+        }
+
+        if (normalized.Contains("fee") || normalized.Contains("atm ") || normalized.Contains("withdrawal"))
         {
             return "Fees";
         }

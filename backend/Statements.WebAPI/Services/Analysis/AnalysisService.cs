@@ -128,16 +128,33 @@ public sealed class AnalysisService : IAnalysisService
         Guid? bankAccountId,
         DateOnly? from,
         DateOnly? to,
+        string? search,
+        Guid? categoryId,
+        decimal? minAmount,
+        decimal? maxAmount,
+        string? transactionType,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Getting transactions for user {UserId}, page {Page}, pageSize {PageSize}",
-            userId, page, pageSize);
+        _logger.LogInformation(
+            "Getting transactions for user {UserId}, page {Page}, pageSize {PageSize}, " +
+            "search: {Search}, categoryId: {CategoryId}, minAmount: {MinAmount}, maxAmount: {MaxAmount}, type: {TransactionType}",
+            userId, page, pageSize, search, categoryId, minAmount, maxAmount, transactionType);
 
         var offset = (page - 1) * pageSize;
 
-        var countParams = new { UserId = userId, BankAccountId = bankAccountId, From = from, To = to };
+        var countParams = new {
+            UserId = userId,
+            BankAccountId = bankAccountId,
+            From = from,
+            To = to,
+            Search = search,
+            CategoryId = categoryId,
+            MinAmount = minAmount,
+            MaxAmount = maxAmount,
+            TransactionType = transactionType
+        };
 
         var totalCount = await _dbExecutor.QuerySingleAsync<int>(
             new CommandDefinition(
@@ -149,6 +166,11 @@ public sealed class AnalysisService : IAnalysisService
                 AND (@BankAccountId IS NULL OR t.bank_account_id = @BankAccountId)
                 AND (@From::date IS NULL OR t.transaction_date >= @From::date)
                 AND (@To::date IS NULL OR t.transaction_date <= @To::date)
+                AND (@Search IS NULL OR t.description ILIKE '%' || @Search || '%')
+                AND (@CategoryId IS NULL OR t.category_id = @CategoryId)
+                AND (@MinAmount IS NULL OR t.amount >= @MinAmount)
+                AND (@MaxAmount IS NULL OR t.amount <= @MaxAmount)
+                AND (@TransactionType IS NULL OR t.transaction_type = @TransactionType)
                 """,
                 countParams,
                 cancellationToken: cancellationToken));
@@ -171,6 +193,11 @@ public sealed class AnalysisService : IAnalysisService
                 AND (@BankAccountId IS NULL OR t.bank_account_id = @BankAccountId)
                 AND (@From::date IS NULL OR t.transaction_date >= @From::date)
                 AND (@To::date IS NULL OR t.transaction_date <= @To::date)
+                AND (@Search IS NULL OR t.description ILIKE '%' || @Search || '%')
+                AND (@CategoryId IS NULL OR t.category_id = @CategoryId)
+                AND (@MinAmount IS NULL OR t.amount >= @MinAmount)
+                AND (@MaxAmount IS NULL OR t.amount <= @MaxAmount)
+                AND (@TransactionType IS NULL OR t.transaction_type = @TransactionType)
                 ORDER BY t.transaction_date DESC, t.created_at DESC
                 LIMIT @PageSize OFFSET @Offset
                 """,
@@ -180,6 +207,11 @@ public sealed class AnalysisService : IAnalysisService
                     BankAccountId = bankAccountId,
                     From = from,
                     To = to,
+                    Search = search,
+                    CategoryId = categoryId,
+                    MinAmount = minAmount,
+                    MaxAmount = maxAmount,
+                    TransactionType = transactionType,
                     PageSize = pageSize,
                     Offset = offset
                 },

@@ -138,7 +138,14 @@ public sealed class ProcessStatementConsumer
                             transaction_date, description, merchant_name,
                             amount, transaction_type, balance_after, external_reference
                         )
-                        SELECT @StatementId, @BankAccountId, c.id,
+                        SELECT @StatementId, @BankAccountId,
+                            COALESCE(
+                                (SELECT r.category_id
+                                 FROM user_category_rules r
+                                 WHERE r.user_id = @UserId
+                                   AND LOWER(r.description) = LOWER(@Description)),
+                                c.id
+                            ),
                             @TransactionDate, @Description, @MerchantName,
                             @Amount, @TransactionType, @BalanceAfter, @ExternalReference
                         FROM transaction_categories c
@@ -148,6 +155,7 @@ public sealed class ProcessStatementConsumer
                         {
                             StatementId = message.StatementId,
                             BankAccountId = bankAccountId,
+                            UserId = message.UserId,
                             TransactionDate = t.TransactionDate,
                             Description = t.Description,
                             MerchantName = t.Description,

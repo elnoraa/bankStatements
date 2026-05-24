@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 using Statements.WebAPI.Auth;
 using Statements.WebAPI.Data;
 using Statements.WebAPI.Hubs;
@@ -44,6 +46,7 @@ if (Directory.Exists(logsDir))
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
+    .Enrich.With<AestTimestampEnricher>()
     .Enrich.WithProperty("Application", "Statements.WebAPI")
     .CreateLogger();
 
@@ -366,4 +369,20 @@ static void ValidateConfiguration(IConfiguration configuration, Microsoft.Extens
     }
 
     logger.LogInformation("Configuration validated successfully.");
+}
+
+/// <summary>
+/// Converts Serilog's UTC timestamp to Australia/Sydney (AEST/AEDT) timezone for log output.
+/// </summary>
+file sealed class AestTimestampEnricher : ILogEventEnricher
+{
+    private static readonly TimeZoneInfo AestZone = TimeZoneInfo.FindSystemTimeZoneById(
+        OperatingSystem.IsWindows() ? "AUS Eastern Standard Time" : "Australia/Sydney");
+
+    public void Enrich(LogEvent logEvent, ILogEventPropertyFactory propertyFactory)
+    {
+        var localTimestamp = TimeZoneInfo.ConvertTime(logEvent.Timestamp, AestZone);
+        var property = propertyFactory.CreateProperty("LocalTimestamp", localTimestamp);
+        logEvent.AddPropertyIfAbsent(property);
+    }
 }

@@ -23,6 +23,7 @@ export function TransactionRow({
   const [isEditing, setIsEditing] = useState(false);
   const [editDescription, setEditDescription] = useState(transaction.description);
   const [editCategoryId, setEditCategoryId] = useState(transaction.categoryId ?? '');
+  const [applyToAll, setApplyToAll] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
@@ -35,6 +36,7 @@ export function TransactionRow({
   function handleStartEdit() {
     setEditDescription(transaction.description);
     setEditCategoryId(transaction.categoryId ?? '');
+    setApplyToAll(false);
     setIsEditing(true);
   }
 
@@ -57,6 +59,10 @@ export function TransactionRow({
       if (Object.keys(body).length === 0) {
         setIsEditing(false);
         return;
+      }
+
+      if (applyToAll && body.categoryId !== undefined) {
+        body.applyToAll = true;
       }
 
       const response = await authedFetch(`${apiBaseUrl}/api/v1/transactions/${transaction.id}`, {
@@ -107,6 +113,10 @@ export function TransactionRow({
             ))}
           </select>
         </div>
+        <label className="transaction-apply-all" style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+          <input type="checkbox" checked={applyToAll} onChange={(e) => setApplyToAll(e.target.checked)} />
+          Apply to all transactions with this description
+        </label>
         <div className="transaction-edit-actions">
           <button className="transaction-save-btn" type="button" onClick={() => void handleSave()} disabled={isSaving}>
             Save

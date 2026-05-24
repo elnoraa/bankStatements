@@ -40,6 +40,11 @@ public interface IAnalysisService
     /// <param name="bankAccountId">Optional bank account ID to filter by.</param>
     /// <param name="from">Optional start date.</param>
     /// <param name="to">Optional end date.</param>
+    /// <param name="search">Optional text to search in transaction descriptions.</param>
+    /// <param name="categoryId">Optional category ID to filter by.</param>
+    /// <param name="minAmount">Optional minimum amount filter.</param>
+    /// <param name="maxAmount">Optional maximum amount filter.</param>
+    /// <param name="transactionType">Optional transaction type filter ("credit" or "debit").</param>
     /// <param name="page">Page number (1-based).</param>
     /// <param name="pageSize">Items per page.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -49,6 +54,11 @@ public interface IAnalysisService
         Guid? bankAccountId,
         DateOnly? from,
         DateOnly? to,
+        string? search,
+        Guid? categoryId,
+        decimal? minAmount,
+        decimal? maxAmount,
+        string? transactionType,
         int page,
         int pageSize,
         CancellationToken cancellationToken);

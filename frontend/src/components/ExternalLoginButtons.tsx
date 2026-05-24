@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { postExternalLogin } from '../services/externalAuth';
+import type { AuthResponse } from '../services/externalAuth';
 
 /**
  * Opens a centered popup window for OAuth authentication.
@@ -57,7 +58,7 @@ async function sha256(text: string) {
   return base64UrlEncode(hash);
 }
 
-export const ExternalLoginButtons: React.FC = () => {
+export const ExternalLoginButtons: React.FC<{ onLoginSuccess?: (response: AuthResponse) => void }> = ({ onLoginSuccess }) => {
   const onMessage = useCallback(async (e: MessageEvent) => {
     try {
       if (e.origin !== window.location.origin) return;
@@ -72,18 +73,18 @@ export const ExternalLoginButtons: React.FC = () => {
         sessionStorage.removeItem(key);
         if (!codeVerifier) throw new Error('Missing code verifier');
         const redirectUri = `${window.location.origin}/auth-callback.html`;
-        await import('../services/externalAuth').then(mod => mod.postExternalCode(provider, data.code, codeVerifier, redirectUri));
+        const respData = await import('../services/externalAuth').then(mod => mod.postExternalCode(provider, data.code, codeVerifier, redirectUri));
+        onLoginSuccess?.(respData);
       } else if (data.id_token || data.access_token) {
         const provider = (data.state && data.state.includes(':') ? data.state.split(':')[1] : null) || 'unknown';
         const idToken = data.id_token || data.access_token;
-        await postExternalLogin(provider, idToken);
+        const respData = await postExternalLogin(provider, idToken);
+        onLoginSuccess?.(respData);
       }
-      // optionally: refresh UI / redirect
-      window.location.reload();
     } catch (err) {
       console.error('External login failed', err);
     }
-  }, []);
+  }, [onLoginSuccess]);
 
   React.useEffect(() => {
     window.addEventListener('message', onMessage);

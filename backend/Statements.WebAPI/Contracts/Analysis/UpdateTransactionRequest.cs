@@ -20,4 +20,10 @@ public sealed class UpdateTransactionRequest
     /// Set to null to uncategorise the transaction.
     /// </summary>
     public Guid? CategoryId { get; init; }
+
+    /// <summary>
+    /// When true and CategoryId is set, applies the category to all transactions
+    /// with the same description owned by this user.
+    /// </summary>
+    public bool? ApplyToAll { get; init; }
 }

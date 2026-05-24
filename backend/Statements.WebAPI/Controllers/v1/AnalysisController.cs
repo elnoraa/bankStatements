@@ -113,6 +113,11 @@ public sealed class AnalysisController : ControllerBase
         [FromQuery] Guid? bankAccountId,
         [FromQuery] DateOnly? from,
         [FromQuery] DateOnly? to,
+        [FromQuery] string? search,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] decimal? minAmount,
+        [FromQuery] decimal? maxAmount,
+        [FromQuery] string? transactionType,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -124,8 +129,13 @@ public sealed class AnalysisController : ControllerBase
         if (pageSize < 1) pageSize = 20;
         if (pageSize > 100) pageSize = 100;
 
+        if (string.IsNullOrWhiteSpace(search)) search = null;
+        if (string.IsNullOrWhiteSpace(transactionType)) transactionType = null;
+
         var result = await _analysisService.GetTransactionsAsync(
-            userId.Value, bankAccountId, from, to, page, pageSize, cancellationToken);
+            userId.Value, bankAccountId, from, to,
+            search, categoryId, minAmount, maxAmount, transactionType,
+            page, pageSize, cancellationToken);
         return Ok(result);
     }
 
