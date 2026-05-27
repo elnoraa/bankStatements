@@ -77,7 +77,7 @@ git clone <repo-url>
 cd bankStatements
 
 # 2. Build and start everything
-docker compose up --build
+./docker-up-build.sh   # or docker-up-build.ps1 on Windows
 ```
 
 ### Access the application
@@ -93,51 +93,8 @@ docker compose up --build
 ### Stop services
 
 ```bash
-docker compose down
+./docker-down.sh   # or docker-down.ps1 on Windows
 ```
-
----
-
-## Project Structure
-
-```
-bankStatements/
-├── backend/
-│   ├── Statements.WebAPI/          # ASP.NET Core API (controllers, services, contracts)
-│   ├── Statements.WebAPI.Tests/    # xUnit tests (210+ unit + integration)
-│   ├── Uploads/                    # Uploaded PDF storage
-│   └── Dockerfile
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx                 # Main component
-│   │   ├── components/             # 11 UI components
-│   │   ├── hooks/                  # Custom hooks (SignalR)
-│   │   └── services/               # API client
-│   ├── Dockerfile
-│   └── package.json
-├── database/
-│   └── init/                       # SQL migrations (001-007)
-├── docker-compose.yml              # Full-stack orchestration (7 services)
-├── .env                            # Environment variables
-├── docker-up-build.ps1 / .sh       # Build & start scripts
-└── docker-down.ps1 / .sh           # Stop scripts
-```
-
----
-
-## Testing
-
-Tests run inside Docker containers.
-
-```bash
-# Unit tests (210+ tests)
-docker compose run --rm test-unit
-
-# Integration tests (require Docker socket)
-docker compose run --rm test-integration
-```
-
-**Test stack:** xUnit · Moq · FluentAssertions · Testcontainers.PostgreSql
 
 ---
 
