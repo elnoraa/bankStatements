@@ -38,6 +38,16 @@ export function RecentActivity({
   const [maxAmountStr, setMaxAmountStr] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'credit' | 'debit'>('all');
 
+  // Sort state
+  const [sortBy, setSortBy] = useState('date');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+
+  /** Toggles sort column or reverses direction if same column clicked. */
+  function toggleSort(column: string) {
+    setSortBy(column);
+    setSortOrder((prev) => (sortBy === column && prev === 'desc' ? 'asc' : 'desc'));
+  }
+
   // Debounce search input
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(searchInput), 350);
@@ -58,26 +68,27 @@ export function RecentActivity({
       if (minAmountStr) params.set('minAmount', minAmountStr);
       if (maxAmountStr) params.set('maxAmount', maxAmountStr);
       if (filterType !== 'all') params.set('transactionType', filterType);
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
 
       const response = await authedFetch(`${apiBaseUrl}/api/v1/analysis/transactions?${params}`);
       if (response.ok) {
         const data = await response.json() as PaginatedTransactionsResponse;
         setPageData(data);
         setGoPage('');
-        goInputRef.current?.focus();
       }
     } catch {
       // Silently fail
     } finally {
       setLoadingPage(false);
     }
-  }, [authedFetch, selectedAccountId, pageSize, debouncedSearch, filterCategoryId, minAmountStr, maxAmountStr, filterType]);
+  }, [authedFetch, selectedAccountId, pageSize, debouncedSearch, filterCategoryId, minAmountStr, maxAmountStr, filterType, sortBy, sortOrder]);
 
   // Reload page 1 when filters change or refreshKey increments
   useEffect(() => {
     void loadPage(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debouncedSearch, filterCategoryId, minAmountStr, maxAmountStr, filterType, selectedAccountId, refreshKey]);
+  }, [debouncedSearch, filterCategoryId, minAmountStr, maxAmountStr, filterType, selectedAccountId, refreshKey, sortBy, sortOrder]);
 
   async function handleChangePageSize(newSize: number) {
     setPageSize(newSize);
@@ -165,8 +176,39 @@ export function RecentActivity({
         </div>
       </div>
 
-      {/* Transaction list */}
+      {/* Transaction list with sortable column headers */}
       <div className="transaction-list">
+        {pageData && (
+          <div className="transaction-list-header">
+            <button
+              type="button"
+              className="sort-header date-col"
+              onClick={() => toggleSort('date')}
+              data-active={sortBy === 'date'}
+              data-dir={sortBy === 'date' ? sortOrder : undefined}
+            >
+              Date {sortBy === 'date' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button
+              type="button"
+              className="sort-header desc-col"
+              onClick={() => toggleSort('description')}
+              data-active={sortBy === 'description'}
+              data-dir={sortBy === 'description' ? sortOrder : undefined}
+            >
+              Description {sortBy === 'description' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+            <button
+              type="button"
+              className="sort-header amount-col"
+              onClick={() => toggleSort('amount')}
+              data-active={sortBy === 'amount'}
+              data-dir={sortBy === 'amount' ? sortOrder : undefined}
+            >
+              Amount {sortBy === 'amount' && (sortOrder === 'asc' ? '↑' : '↓')}
+            </button>
+          </div>
+        )}
         {loadingPage && pageData === null && (
           <p className="empty-state">Loading transactions...</p>
         )}

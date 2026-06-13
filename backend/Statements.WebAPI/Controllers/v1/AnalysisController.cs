@@ -118,6 +118,8 @@ public sealed class AnalysisController : ControllerBase
         [FromQuery] decimal? minAmount,
         [FromQuery] decimal? maxAmount,
         [FromQuery] string? transactionType,
+        [FromQuery] string? sortBy = null,
+        [FromQuery] string? sortOrder = null,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 20,
         CancellationToken cancellationToken = default)
@@ -131,11 +133,13 @@ public sealed class AnalysisController : ControllerBase
 
         if (string.IsNullOrWhiteSpace(search)) search = null;
         if (string.IsNullOrWhiteSpace(transactionType)) transactionType = null;
+        if (string.IsNullOrWhiteSpace(sortBy)) sortBy = null;
+        if (string.IsNullOrWhiteSpace(sortOrder)) sortOrder = null;
 
         var result = await _analysisService.GetTransactionsAsync(
             userId.Value, bankAccountId, from, to,
             search, categoryId, minAmount, maxAmount, transactionType,
-            page, pageSize, cancellationToken);
+            sortBy, sortOrder, page, pageSize, cancellationToken);
         return Ok(result);
     }
 

@@ -535,6 +535,10 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId, auth]);
 
+  // Keep a ref to the latest loadSummary so SignalR handler never has stale closure
+  const loadSummaryRef = useRef(loadSummary);
+  loadSummaryRef.current = loadSummary;
+
   // Handle real-time status updates from SignalR
   const handleStatusUpdate = useCallback((update: StatementStatusUpdate) => {
     setStatementStatus(update.status);
@@ -545,7 +549,7 @@ function App() {
     setStatementRefreshKey((k) => k + 1);
 
     if (update.status === 'processed') {
-      void loadSummary();
+      void loadSummaryRef.current();
       setTransactionRefreshKey((k) => k + 1);
     } else if (update.status === 'failed') {
       setAppMessage(update.errorMessage ?? 'Statement processing failed.');

@@ -21,6 +21,15 @@ public sealed class TransactionService : ITransactionService
 
     public async Task UpdateAsync(Guid userId, Guid transactionId, UpdateTransactionRequest request, CancellationToken cancellationToken)
     {
+        // Log the update request details before executing
+        _logger.LogInformation(
+            "[CategoryEdit] User={UserId}, Transaction={TransactionId}, " +
+            "newDescription=\"{NewDesc}\", newCategoryId={NewCategoryId}, " +
+            "newAmount={NewAmount}, applyToAll={ApplyToAll}",
+            userId, transactionId,
+            request.Description, request.CategoryId,
+            request.Amount, request.ApplyToAll);
+
         var rows = await _dbExecutor.ExecuteAsync(
             new CommandDefinition(
                 """
@@ -47,18 +56,25 @@ public sealed class TransactionService : ITransactionService
         if (rows == 0)
         {
             _logger.LogWarning(
-                "Transaction {TransactionId} not found or not owned by user {UserId}",
+                "[CategoryEdit] Transaction {TransactionId} not found or not owned by user {UserId}",
                 transactionId, userId);
             throw new InvalidOperationException("Transaction not found.");
         }
 
         _logger.LogInformation(
-            "Transaction {TransactionId} updated by user {UserId}",
-            transactionId, userId);
+            "[CategoryEdit] Transaction {TransactionId} updated successfully — " +
+            "description={Description}, categoryId={CategoryId}, amount={Amount}",
+            transactionId, request.Description, request.CategoryId, request.Amount);
 
         // Bulk apply category to all transactions with the same description
         if (request.ApplyToAll == true && request.CategoryId.HasValue && request.Description is not null)
         {
+            _logger.LogInformation(
+                "[CategoryEdit] Bulk apply requested for description=\"{Description}\" → categoryId={CategoryId}",
+                request.Description, request.CategoryId);
+
+            // Uses ILIKE (contains) match: "McDonald's" matches "McDonald's Clayton South",
+            // "McDonald's Richmond", etc. This lets you categorise all branch variants at once.
             var bulkRows = await _dbExecutor.ExecuteAsync(
                 new CommandDefinition(
                     """
@@ -67,7 +83,7 @@ public sealed class TransactionService : ITransactionService
                     FROM bank_statements s
                     WHERE t.bank_statement_id = s.id
                       AND s.user_id = @UserId
-                      AND LOWER(t.description) = LOWER(@Description)
+                      AND t.description ILIKE '%' || @Description || '%'
                       AND t.id != @TransactionId
                     """,
                     new
@@ -80,8 +96,15 @@ public sealed class TransactionService : ITransactionService
                     cancellationToken: cancellationToken));
 
             _logger.LogInformation(
-                "Bulk category update applied to {Count} additional transactions for user {UserId}",
-                bulkRows, userId);
+                "[CategoryEdit] Bulk update completed: {Count} additional transaction(s) " +
+                "with description ILIKE '%{Description}%' updated to categoryId={CategoryId}",
+                bulkRows, request.Description, request.CategoryId);
+
+            // Log what the matching criteria was
+            _logger.LogDebug(
+                "[CategoryEdit] Bulk update matched using: " +
+                "t.description ILIKE '%{Description}%' AND t.id != {TransactionId}",
+                request.Description, transactionId);
 
             // Save the mapping as a persistent rule so future imports use this category
             await _dbExecutor.ExecuteAsync(
@@ -101,8 +124,15 @@ public sealed class TransactionService : ITransactionService
                     cancellationToken: cancellationToken));
 
             _logger.LogInformation(
-                "Category rule saved for user {UserId}, description '{Description}'",
-                userId, request.Description);
+                "[CategoryEdit] Persistent rule saved: description=\"{Description}\" → categoryId={CategoryId} " +
+                "for user {UserId} — future imports with this description will auto-categorise",
+                request.Description, request.CategoryId, userId);
+        }
+        else if (request.ApplyToAll != true && request.CategoryId.HasValue)
+        {
+            _logger.LogInformation(
+                "[CategoryEdit] Single transaction only — \"Apply to all\" was not checked. " +
+                "Other transactions with the same description were NOT updated.");
         }
     }
 

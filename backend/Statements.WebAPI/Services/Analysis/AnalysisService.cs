@@ -133,14 +133,16 @@ public sealed class AnalysisService : IAnalysisService
         decimal? minAmount,
         decimal? maxAmount,
         string? transactionType,
+        string? sortBy,
+        string? sortOrder,
         int page,
         int pageSize,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Getting transactions for user {UserId}, page {Page}, pageSize {PageSize}, " +
-            "search: {Search}, categoryId: {CategoryId}, minAmount: {MinAmount}, maxAmount: {MaxAmount}, type: {TransactionType}",
-            userId, page, pageSize, search, categoryId, minAmount, maxAmount, transactionType);
+            "search: {Search}, categoryId: {CategoryId}, minAmount: {MinAmount}, maxAmount: {MaxAmount}, type: {TransactionType}, sortBy: {SortBy}, sortOrder: {SortOrder}",
+            userId, page, pageSize, search, categoryId, minAmount, maxAmount, transactionType, sortBy, sortOrder);
 
         var offset = (page - 1) * pageSize;
 
@@ -175,9 +177,12 @@ public sealed class AnalysisService : IAnalysisService
                 countParams,
                 cancellationToken: cancellationToken));
 
+        // Build ORDER BY clause with whitelist to prevent SQL injection
+        var orderBy = BuildOrderByClause(sortBy, sortOrder);
+
         var items = (await _dbExecutor.QueryAsync<RecentTransactionResponse>(
             new CommandDefinition(
-                """
+                $"""
                 SELECT
                     t.id AS Id,
                     t.transaction_date AS TransactionDate,
@@ -198,7 +203,7 @@ public sealed class AnalysisService : IAnalysisService
                 AND (@MinAmount IS NULL OR t.amount >= @MinAmount)
                 AND (@MaxAmount IS NULL OR t.amount <= @MaxAmount)
                 AND (@TransactionType IS NULL OR t.transaction_type = @TransactionType)
-                ORDER BY t.transaction_date DESC, t.created_at DESC
+                ORDER BY {orderBy}
                 LIMIT @PageSize OFFSET @Offset
                 """,
                 new
@@ -274,6 +279,37 @@ public sealed class AnalysisService : IAnalysisService
             userId, periods.Count, categories.Count);
 
         return new SpendingTrendResponse(periods, categories, points);
+    }
+
+    /// <summary>
+    /// Builds a safe ORDER BY clause from user-supplied sort parameters.
+    /// Only whitelisted column names and directions are accepted.
+    /// </summary>
+    private static string BuildOrderByClause(string? sortBy, string? sortOrder)
+    {
+        var validColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["date"] = "t.transaction_date",
+            ["amount"] = "t.amount",
+            ["description"] = "t.description",
+            ["type"] = "t.transaction_type",
+            ["category"] = "c.name",
+        };
+
+        var dir = sortOrder?.ToLowerInvariant() switch
+        {
+            "asc" => "ASC",
+            "desc" => "DESC",
+            _ => "DESC" // default
+        };
+
+        if (sortBy is not null && validColumns.TryGetValue(sortBy, out var column))
+        {
+            return $"{column} {dir}, t.created_at DESC";
+        }
+
+        // Default sort
+        return $"t.transaction_date DESC, t.created_at DESC";
     }
 
     internal sealed class CashflowTotals

@@ -239,10 +239,14 @@ button:disabled {
 .transactions-panel {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .transactions-panel .transaction-list {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .section-heading {
@@ -259,10 +263,59 @@ button:disabled {
   gap: 12px;
 }
 
-.category-list,
-.transaction-list {
+.category-list {
   display: grid;
   gap: 8px;
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Sortable column header row in the transaction list */
+.transaction-list-header {
+  display: grid;
+  grid-template-columns: 100px 1fr 100px;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #dce3eb;
+  margin-bottom: 0;
+  position: sticky;
+  top: 0;
+  background: #ffffff;
+  z-index: 1;
+}
+
+.sort-header {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #68758a;
+  padding: 4px 6px;
+  text-align: inherit;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: color 0.15s;
+}
+
+.sort-header:hover {
+  color: #172033;
+}
+
+.sort-header[data-active='true'] {
+  color: #245f73;
+}
+
+.amount-col {
+  text-align: right;
+  justify-content: flex-end;
 }
 
 .category-row,

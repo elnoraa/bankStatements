@@ -139,13 +139,18 @@ public sealed class ProcessStatementConsumer
                             amount, transaction_type, balance_after, external_reference
                         )
                         SELECT @StatementId, @BankAccountId,
-                            COALESCE(
-                                (SELECT r.category_id
-                                 FROM user_category_rules r
-                                 WHERE r.user_id = @UserId
-                                   AND LOWER(r.description) = LOWER(@Description)),
-                                c.id
-                            ),
+                            CASE
+                                WHEN c.name != 'Uncategorised' THEN c.id
+                                ELSE COALESCE(
+                                    (SELECT r.category_id
+                                     FROM user_category_rules r
+                                     WHERE r.user_id = @UserId
+                                       AND @Description ILIKE '%' || r.description || '%'
+                                     ORDER BY LENGTH(r.description) DESC
+                                     LIMIT 1),
+                                    c.id
+                                )
+                            END,
                             @TransactionDate, @Description, @MerchantName,
                             @Amount, @TransactionType, @BalanceAfter, @ExternalReference
                         FROM transaction_categories c

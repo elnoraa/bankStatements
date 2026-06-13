@@ -59,6 +59,8 @@ public interface IAnalysisService
         decimal? minAmount,
         decimal? maxAmount,
         string? transactionType,
+        string? sortBy,
+        string? sortOrder,
         int page,
         int pageSize,
         CancellationToken cancellationToken);

@@ -63,6 +63,9 @@ export function TransactionRow({
 
       if (applyToAll && body.categoryId !== undefined) {
         body.applyToAll = true;
+        // The backend needs the description to match similar transactions.
+        // Always send it when applying to all, even if unchanged.
+        body.description = editDescription;
       }
 
       const response = await authedFetch(`${apiBaseUrl}/api/v1/transactions/${transaction.id}`, {
