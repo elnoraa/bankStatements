@@ -35,3 +35,5 @@ coverage/
 .claude/
 
 *.txt
+
+plans/
