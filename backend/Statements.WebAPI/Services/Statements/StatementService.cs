@@ -230,17 +230,30 @@ public sealed class StatementService : IStatementService
             _logger.LogInformation("Bank statement record created: StatementId={StatementId}, Status={Status}", statement.Id, statement.Status);
 
             // Publish message for background processing instead of parsing synchronously
-            await _messagePublisher.PublishAsync(new ProcessStatementMessage
+            try
             {
-                StatementId = statement.Id,
-                StoredFileName = storedFileName,
-                UserId = userId,
-                BankAccountId = bankAccountId
-            }, cancellationToken);
+                await _messagePublisher.PublishAsync(new ProcessStatementMessage
+                {
+                    StatementId = statement.Id,
+                    StoredFileName = storedFileName,
+                    UserId = userId,
+                    BankAccountId = bankAccountId
+                }, cancellationToken);
 
-            _logger.LogInformation(
-                "Statement {StatementId} uploaded and message published for background processing",
-                statement.Id);
+                _logger.LogInformation(
+                    "Statement {StatementId} uploaded and message published for background processing",
+                    statement.Id);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to publish message for statement {StatementId}. " +
+                    "Statement remains in 'uploaded' status and can be retried from the UI.",
+                    statement.Id);
+                // Don't throw — the file was saved and the DB record created.
+                // The user can retry processing from the statement management UI.
+                // The statement stays as 'uploaded' (not 'failed') so the retry endpoint picks it up.
+            }
 
             return statement;
         }
@@ -357,17 +370,29 @@ public sealed class StatementService : IStatementService
                 new { Id = statementId, UserId = userId },
                 cancellationToken: cancellationToken));
 
-        await _messagePublisher.PublishAsync(new ProcessStatementMessage
+        try
         {
-            StatementId = statementId,
-            StoredFileName = statement.stored_file_name,
-            UserId = userId,
-            BankAccountId = statement.bank_account_id
-        }, cancellationToken);
+            await _messagePublisher.PublishAsync(new ProcessStatementMessage
+            {
+                StatementId = statementId,
+                StoredFileName = statement.stored_file_name,
+                UserId = userId,
+                BankAccountId = statement.bank_account_id
+            }, cancellationToken);
 
-        _logger.LogInformation(
-            "Statement {StatementId} queued for reprocessing by user {UserId}",
-            statementId, userId);
+            _logger.LogInformation(
+                "Statement {StatementId} queued for reprocessing by user {UserId}",
+                statementId, userId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Failed to publish retry message for statement {StatementId}. " +
+                "Statement status remains 'uploaded'.",
+                statementId);
+            // Don't throw — the status was already reset to 'uploaded'.
+            // The user can retry again from the UI.
+        }
     }
 
     /// <inheritdoc />

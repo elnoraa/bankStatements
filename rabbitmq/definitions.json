@@ -1,0 +1,46 @@
+{
+  "policies": [
+    {
+      "vhost": "/",
+      "name": "statement-processing",
+      "pattern": "^process-statement$",
+      "apply-to": "queues",
+      "definition": {
+        "dead-letter-exchange": "process-statement.dlx",
+        "dead-letter-routing-key": "process-statement.dlq",
+        "delivery-limit": 5
+      },
+      "priority": 0
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "process-statement.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "process-statement.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "process-statement.dlx",
+      "vhost": "/",
+      "destination": "process-statement.dlq",
+      "destination_type": "queue",
+      "routing_key": "process-statement.dlq",
+      "arguments": {}
+    }
+  ]
+}

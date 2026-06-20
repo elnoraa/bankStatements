@@ -41,6 +41,9 @@ public sealed class ProcessStatementConsumer
             "Processing statement: StatementId={StatementId}", message.StatementId);
 
         // Step 1: Idempotency check — skip if already processed or failed
+        // At-least-once delivery means we may see duplicates if the broker redelivers
+        // a message that was already processed (e.g., ACK lost due to network issue).
+        // Checking status prevents double-processing.
         var currentStatus = await _dbExecutor.QuerySingleOrDefaultAsync<string>(
             new CommandDefinition(
                 """
