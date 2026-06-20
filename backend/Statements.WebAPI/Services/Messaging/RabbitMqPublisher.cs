@@ -38,7 +38,7 @@ public sealed class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
             };
 
             await _channel!.BasicPublishAsync(
-                exchange: "",
+                exchange: "process-statement",
                 routingKey: "process-statement",
                 mandatory: true,
                 body: body,
@@ -86,12 +86,26 @@ public sealed class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
             // Enable publisher confirms on this channel
             await _channel.ConfirmSelectAsync(ct);
 
+            // Declare the exchange (idempotent — no-op if already exists)
+            await _channel.ExchangeDeclareAsync(
+                exchange: "process-statement",
+                type: "direct",
+                durable: true,
+                cancellationToken: ct);
+
             // Declare the main queue (idempotent — no-op if already exists)
             await _channel.QueueDeclareAsync(
                 queue: "process-statement",
                 durable: true,
                 exclusive: false,
                 autoDelete: false,
+                cancellationToken: ct);
+
+            // Bind the queue to the exchange
+            await _channel.QueueBindAsync(
+                queue: "process-statement",
+                exchange: "process-statement",
+                routingKey: "process-statement",
                 cancellationToken: ct);
 
             _initialized = true;

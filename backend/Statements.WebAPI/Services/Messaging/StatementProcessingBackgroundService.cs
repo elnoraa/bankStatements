@@ -14,10 +14,12 @@ namespace Statements.WebAPI.Services.Messaging;
 /// - Dead letter exchange + queue for poison messages (after delivery-limit retries)
 /// - Automatic connection recovery with topology recovery
 /// - Outer retry loop for total broker outage
+/// - Multiple concurrent consumers within a single instance for throughput
 /// </summary>
 public sealed class StatementProcessingBackgroundService : BackgroundService
 {
     private const string MainQueue = "process-statement";
+    private const string MainExchange = "process-statement";
     private const string DeadLetterExchange = "process-statement.dlx";
     private const string DeadLetterQueue = "process-statement.dlq";
     private const string DeadLetterRoutingKey = "process-statement.dlq";
@@ -25,6 +27,7 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StatementProcessingBackgroundService> _logger;
+    private readonly int _consumerCount;
 
     public StatementProcessingBackgroundService(
         IServiceScopeFactory scopeFactory,
@@ -34,6 +37,9 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         _scopeFactory = scopeFactory;
         _configuration = configuration;
         _logger = logger;
+        _consumerCount = configuration.GetValue<int>("RabbitMq:ConsumerCount");
+        if (_consumerCount <= 0)
+            _consumerCount = 3; // safe default
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -42,7 +48,7 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         {
             try
             {
-                await RunConsumerAsync(stoppingToken);
+                await RunConsumersAsync(stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -56,7 +62,11 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         }
     }
 
-    private async Task RunConsumerAsync(CancellationToken stoppingToken)
+    /// <summary>
+    /// Creates a single connection and spawns <see cref="_consumerCount"/> consumers,
+    /// each on its own channel, all subscribing to the same queue.
+    /// </summary>
+    private async Task RunConsumersAsync(CancellationToken stoppingToken)
     {
         var factory = new ConnectionFactory
         {
@@ -71,10 +81,31 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         };
 
         await using var connection = await factory.CreateConnectionAsync(stoppingToken);
+
+        var consumerTasks = new List<Task>();
+        for (int i = 0; i < _consumerCount; i++)
+        {
+            var index = i;
+            consumerTasks.Add(RunSingleConsumerAsync(connection, index, stoppingToken));
+        }
+
+        _logger.LogInformation(
+            "Started {ConsumerCount} consumers on queue '{Queue}' with DLQ '{DeadLetterQueue}'",
+            _consumerCount, MainQueue, DeadLetterQueue);
+
+        await Task.WhenAll(consumerTasks);
+    }
+
+    /// <summary>
+    /// Runs a single consumer on its own channel.
+    /// All topology declarations are idempotent and safe to call from multiple channels.
+    /// </summary>
+    private async Task RunSingleConsumerAsync(
+        IConnection connection, int consumerIndex, CancellationToken stoppingToken)
+    {
         await using var channel = await connection.CreateChannelAsync(cancellationToken: stoppingToken);
 
-        // Declare DLX exchange and DLQ (idempotent — managed by code so the DLQ
-        // exists even before the RabbitMQ definitions file applies the policy)
+        // Declare DLX exchange and DLQ (idempotent — no-op if already exists)
         await channel.ExchangeDeclareAsync(
             exchange: DeadLetterExchange,
             type: "direct",
@@ -94,9 +125,13 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
             routingKey: DeadLetterRoutingKey,
             cancellationToken: stoppingToken);
 
-        // Declare the main queue (idempotent — no-op if already exists)
-        // The DLX + delivery-limit is applied via RabbitMQ policy (definitions.json),
-        // not queue arguments, so no queue deletion is needed.
+        // Declare main exchange and queue + binding (idempotent)
+        await channel.ExchangeDeclareAsync(
+            exchange: MainExchange,
+            type: "direct",
+            durable: true,
+            cancellationToken: stoppingToken);
+
         await channel.QueueDeclareAsync(
             queue: MainQueue,
             durable: true,
@@ -104,47 +139,22 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
             autoDelete: false,
             cancellationToken: stoppingToken);
 
-        // Process one message at a time
+        await channel.QueueBindAsync(
+            queue: MainQueue,
+            exchange: MainExchange,
+            routingKey: MainQueue,
+            cancellationToken: stoppingToken);
+
+        // Allow each consumer to grab up to 3 messages at a time
         await channel.BasicQosAsync(
             prefetchSize: 0,
-            prefetchCount: 1,
+            prefetchCount: 3,
             global: false,
             cancellationToken: stoppingToken);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, ea) =>
-        {
-            ProcessStatementMessage? message = null;
-            try
-            {
-                message = JsonSerializer.Deserialize<ProcessStatementMessage>(ea.Body.Span);
-                if (message is null)
-                {
-                    // Bad message — NACK without requeue, it will be dead-lettered
-                    await channel.BasicNackAsync(ea.DeliveryTag, false, false, stoppingToken);
-                    return;
-                }
-
-                using var scope = _scopeFactory.CreateScope();
-                var processor = scope.ServiceProvider.GetRequiredService<ProcessStatementConsumer>();
-                await processor.ConsumeAsync(message, stoppingToken);
-
-                // Success — acknowledge
-                await channel.BasicAckAsync(ea.DeliveryTag, false, stoppingToken);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to process statement {StatementId}", message?.StatementId);
-
-                // NACK with requeue=true — the broker's delivery-limit policy (5)
-                // will dead-letter the message to process-statement.dlx after
-                // the limit is exceeded. This replaces the old infinite retry loop.
-                await channel.BasicNackAsync(ea.DeliveryTag, false, true, stoppingToken);
-
-                // Brief delay to avoid tight requeue loops on transient failures
-                await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken);
-            }
-        };
+            await HandleDeliveryAsync(channel, ea, stoppingToken);
 
         await channel.BasicConsumeAsync(
             MainQueue,
@@ -152,10 +162,7 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
             consumer: consumer,
             cancellationToken: stoppingToken);
 
-        _logger.LogInformation(
-            "Statement processing background service started, listening on queue '{Queue}' " +
-            "with DLQ '{DeadLetterQueue}' and delivery-limit policy",
-            MainQueue, DeadLetterQueue);
+        _logger.LogDebug("Consumer #{ConsumerIndex} started on queue '{Queue}'", consumerIndex, MainQueue);
 
         // Keep running until cancellation is requested
         try
@@ -165,6 +172,49 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         catch (OperationCanceledException)
         {
             // Graceful shutdown
+        }
+    }
+
+    /// <summary>
+    /// Handles a single message delivery: deserializes, delegates to <see cref="ProcessStatementConsumer"/>,
+    /// and ACKs/NACKs the message accordingly.
+    ///
+    /// Internal visibility for unit testing.
+    /// </summary>
+    internal async Task HandleDeliveryAsync(
+        IChannel channel,
+        BasicDeliverEventArgs ea,
+        CancellationToken cancellationToken)
+    {
+        ProcessStatementMessage? message = null;
+        try
+        {
+            message = JsonSerializer.Deserialize<ProcessStatementMessage>(ea.Body.Span);
+            if (message is null)
+            {
+                // Bad message — NACK without requeue, it will be dead-lettered
+                await channel.BasicNackAsync(ea.DeliveryTag, false, false, cancellationToken);
+                return;
+            }
+
+            using var scope = _scopeFactory.CreateScope();
+            var processor = scope.ServiceProvider.GetRequiredService<ProcessStatementConsumer>();
+            await processor.ConsumeAsync(message, cancellationToken);
+
+            // Success — acknowledge
+            await channel.BasicAckAsync(ea.DeliveryTag, false, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to process statement {StatementId}", message?.StatementId);
+
+            // NACK with requeue=true — the broker's delivery-limit policy (5)
+            // will dead-letter the message to process-statement.dlx after
+            // the limit is exceeded. This replaces the old infinite retry loop.
+            await channel.BasicNackAsync(ea.DeliveryTag, false, true, cancellationToken);
+
+            // Brief delay to avoid tight requeue loops on transient failures
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
         }
     }
 }

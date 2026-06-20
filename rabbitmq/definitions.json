@@ -15,6 +15,15 @@
   ],
   "exchanges": [
     {
+      "name": "process-statement",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
       "name": "process-statement.dlx",
       "vhost": "/",
       "type": "direct",
