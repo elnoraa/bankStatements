@@ -47,7 +47,7 @@ export function SpendingBreakdown({
               {progressMap.has(category.category) && (
                 <BudgetBar
                   categoryName={category.category}
-                  spent={category.totalDebit}
+                  spent={progressMap.get(category.category)!.actualSpending}
                   budget={progressMap.get(category.category)!.budgetAmount}
                   currency={currency}
                 />

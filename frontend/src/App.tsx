@@ -451,10 +451,14 @@ function App() {
     }
   }
 
-  /** Loads budget progress for the current month and account. */
-  async function loadBudgetProgress() {
-    const now = new Date();
-    const params = new URLSearchParams({ year: now.getFullYear().toString(), month: String(now.getMonth() + 1) });
+  /** Loads budget progress for the given month and account. Defaults to current month. */
+  async function loadBudgetProgress(year?: number, month?: number) {
+    if (!year || !month) {
+      const now = new Date();
+      year = now.getFullYear();
+      month = now.getMonth() + 1;
+    }
+    const params = new URLSearchParams({ year: year.toString(), month: month.toString() });
     if (selectedAccountId !== TOTAL_ID) {
       params.set('bankAccountId', selectedAccountId);
     }
@@ -668,7 +672,7 @@ function App() {
         accountsMessage={accountsMessage}
       />
 
-      <section className="dashboard-grid">
+      <section className="dashboard-grid" style={{ marginBottom: 24 }}>
         <UploadPanel
           selectedAccountId={selectedAccountId}
           selectedFile={selectedFile}
@@ -685,7 +689,7 @@ function App() {
         <MetricStrip summary={summary} currency={currency} />
       </section>
 
-      <section className="content-grid">
+      <section className="content-grid" style={{ marginBottom: 24 }}>
         <SpendingBreakdown
           summary={summary}
           loadSummary={loadSummary}
@@ -710,15 +714,20 @@ function App() {
         />
       </section>
 
-      <StatementManager authedFetch={authedFetch} refreshKey={statementRefreshKey} onDelete={() => { void loadSummary(); setTransactionRefreshKey((k) => k + 1); }} />
+      <section style={{ marginBottom: 24 }}>
+        <StatementManager authedFetch={authedFetch} refreshKey={statementRefreshKey} onDelete={() => { void loadSummary(); setTransactionRefreshKey((k) => k + 1); }} />
+      </section>
 
       <BasiqPanel authedFetch={authedFetch} />
 
-      <BudgetManager
-        categories={categories}
-        authedFetch={authedFetch}
-        onBudgetsChanged={() => void loadBudgetProgress()}
-      />
+      <section style={{ marginBottom: 24 }}>
+        <BudgetManager
+          categories={categories}
+          authedFetch={authedFetch}
+          onBudgetsChanged={() => void loadBudgetProgress()}
+          onMonthChange={(year, month) => void loadBudgetProgress(year, month)}
+        />
+      </section>
     </main>
   );
 }

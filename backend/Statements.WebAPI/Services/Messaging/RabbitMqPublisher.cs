@@ -37,21 +37,15 @@ public sealed class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
                 DeliveryMode = DeliveryModes.Persistent
             };
 
+            // BasicPublishAsync completes when the broker confirms (ACKs) the message.
+            // If the broker NACKs or the connection drops before confirming, the task
+            // will throw — giving us at-least-once delivery semantics.
             await _channel!.BasicPublishAsync(
                 exchange: "process-statement",
                 routingKey: "process-statement",
                 mandatory: true,
                 body: body,
                 cancellationToken: cancellationToken);
-
-            // Wait for broker confirmation (publisher confirms)
-            // This is the key to at-least-once delivery on the publish side
-            bool confirmed = await _channel.WaitForConfirmsAsync(cancellationToken);
-            if (!confirmed)
-            {
-                throw new InvalidOperationException(
-                    $"Broker did not confirm message publication for type {typeof(T).Name}");
-            }
         }
         finally
         {
@@ -81,10 +75,14 @@ public sealed class RabbitMqPublisher : IMessagePublisher, IAsyncDisposable
             };
 
             _connection = await factory.CreateConnectionAsync(ct);
-            _channel = await _connection.CreateChannelAsync(cancellationToken: ct);
-
-            // Enable publisher confirms on this channel
-            await _channel.ConfirmSelectAsync(ct);
+            // Enable publisher confirms via CreateChannelOptions (RabbitMQ.Client 7.x)
+            // The await on BasicPublishAsync will wait for broker confirmation.
+            var channelOptions = new CreateChannelOptions(
+                publisherConfirmationsEnabled: true,
+                publisherConfirmationTrackingEnabled: true);
+            _channel = await _connection.CreateChannelAsync(
+                options: channelOptions,
+                cancellationToken: ct);
 
             // Declare the exchange (idempotent — no-op if already exists)
             await _channel.ExchangeDeclareAsync(

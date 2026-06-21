@@ -13,9 +13,10 @@ interface BudgetManagerProps {
   categories: { id: string; name: string }[];
   authedFetch: (url: string, options?: RequestInit) => Promise<Response>;
   onBudgetsChanged?: () => void;
+  onMonthChange?: (year: number, month: number) => void;
 }
 
-export function BudgetManager({ categories, authedFetch, onBudgetsChanged }: BudgetManagerProps) {
+export function BudgetManager({ categories, authedFetch, onBudgetsChanged, onMonthChange }: BudgetManagerProps) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -47,6 +48,11 @@ export function BudgetManager({ categories, authedFetch, onBudgetsChanged }: Bud
   useEffect(() => {
     void loadBudgets();
   }, [loadBudgets]);
+
+  // Notify parent when selected month changes, so budget progress chart updates
+  useEffect(() => {
+    onMonthChange?.(year, month);
+  }, [year, month, onMonthChange]);
 
   async function handleSave(categoryId: string) {
     const amount = parseFloat(editAmounts[categoryId]);

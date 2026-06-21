@@ -10,7 +10,7 @@ namespace Statements.WebAPI.Services.Statements;
 /// Processes a <see cref="ProcessStatementMessage"/> by parsing the PDF file
 /// and inserting the extracted transactions into the database.
 /// </summary>
-public sealed class ProcessStatementConsumer
+public class ProcessStatementConsumer
 {
     private readonly IDbExecutor _dbExecutor;
     private readonly IStatementParser _statementParser;
@@ -35,7 +35,7 @@ public sealed class ProcessStatementConsumer
         _logger = logger;
     }
 
-    public async Task ConsumeAsync(ProcessStatementMessage message, CancellationToken cancellationToken)
+    public virtual async Task ConsumeAsync(ProcessStatementMessage message, CancellationToken cancellationToken)
     {
         _logger.LogInformation(
             "Processing statement: StatementId={StatementId}", message.StatementId);

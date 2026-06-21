@@ -39,7 +39,7 @@ public sealed class StatementProcessingBackgroundService : BackgroundService
         _logger = logger;
         _consumerCount = configuration.GetValue<int>("RabbitMq:ConsumerCount");
         if (_consumerCount <= 0)
-            _consumerCount = 3; // safe default
+            _consumerCount = 1; // safe default
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

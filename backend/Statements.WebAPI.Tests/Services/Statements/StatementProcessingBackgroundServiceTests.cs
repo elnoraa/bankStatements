@@ -18,7 +18,6 @@ namespace Statements.WebAPI.Tests.Services.Statements;
 public sealed class StatementProcessingBackgroundServiceTests
 {
     private readonly Mock<IServiceScopeFactory> _scopeFactoryMock = new();
-    private readonly Mock<IConfiguration> _configurationMock = new();
     private readonly Mock<ILogger<StatementProcessingBackgroundService>> _loggerMock = new();
     private readonly Mock<IServiceScope> _scopeMock = new();
     private readonly Mock<IServiceProvider> _serviceProviderMock = new();
@@ -60,26 +59,28 @@ public sealed class StatementProcessingBackgroundServiceTests
         _serviceProviderMock
             .Setup(x => x.GetService(typeof(ProcessStatementConsumer)))
             .Returns(_consumerMock.Object);
-        _serviceProviderMock
-            .Setup(x => x.GetRequiredService(typeof(ProcessStatementConsumer)))
-            .Returns(_consumerMock.Object);
         _scopeFactoryMock.Setup(x => x.CreateScope()).Returns(_scopeMock.Object);
 
-        _configurationMock
-            .Setup(x => x.GetValue<int>("RabbitMq:ConsumerCount"))
-            .Returns(3);
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["RabbitMq:ConsumerCount"] = "3"
+            })
+            .Build();
 
         _sut = new StatementProcessingBackgroundService(
             _scopeFactoryMock.Object,
-            _configurationMock.Object,
+            config,
             _loggerMock.Object);
     }
 
     private static BasicDeliverEventArgs CreateDelivery(ProcessStatementMessage? message)
     {
-        var body = message is not null
+        // For null message, serialize a JSON null literal so that
+        // Deserialize<ProcessStatementMessage?> returns null (not a default instance).
+        ReadOnlyMemory<byte> body = message is not null
             ? JsonSerializer.SerializeToUtf8Bytes(message)
-            : JsonSerializer.SerializeToUtf8Bytes(new { invalid = "data" });
+            : JsonSerializer.SerializeToUtf8Bytes<ProcessStatementMessage?>(null);
 
         return new BasicDeliverEventArgs(
             consumerTag: "test-consumer",
@@ -87,7 +88,7 @@ public sealed class StatementProcessingBackgroundServiceTests
             redelivered: false,
             exchange: "process-statement",
             routingKey: "process-statement",
-            basicProperties: new BasicProperties(),
+            properties: new BasicProperties(),
             body: body);
     }
 

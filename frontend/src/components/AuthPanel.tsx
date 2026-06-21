@@ -29,6 +29,7 @@ export function AuthPanel({
   authMessage, isAuthLoading, handleAuthSubmit,
   authView, setAuthView,
   onForgotPassword, onVerifyEmail, onResetPassword,
+  onExternalLogin,
 }: AuthPanelProps) {
   const [forgotEmail, setForgotEmail] = useState('');
   const [verifyToken, setVerifyToken] = useState('');
